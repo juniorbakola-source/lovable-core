@@ -124,7 +124,71 @@ function SkusPage() {
     else { toast.success(`Imported ${rows.length} SKUs`); load(); }
   }
 
-  async function remove(id: string) {
+  // Import the ELKA "Min Max Complet" Excel format directly.
+  // Header row is at row 4 (1-indexed). Columns used:
+  // B Item | C En main | F En commande | N Last Cost | O Delay Provisioning
+  // L Classe Actuelle | X Conso quotidienne 3 mois | T Conso quotidienne 1 an | AB New EOQ
+  async function importElkaXlsx(file: File) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null }) as (string | number | null)[][];
+      // Data starts at row index 4 (5th row)
+      const dataRows = matrix.slice(4);
+      const seen = new Set<string>();
+      const rows = dataRows.map((r) => {
+        const item = r[1] != null ? String(r[1]).trim() : "";
+        if (!item || seen.has(item)) return null;
+        seen.add(item);
+        const num = (v: unknown, d = 0) => {
+          const n = typeof v === "number" ? v : Number(v);
+          return isFinite(n) ? n : d;
+        };
+        const stock = Math.max(0, Math.round(num(r[2])));
+        const onOrder = Math.max(0, Math.round(num(r[5])));
+        const lastCost = num(r[13]);
+        const delay = Math.max(1, Math.round(num(r[14], 7)));
+        const eoq = Math.max(1, Math.round(num(r[27], 1)));
+        const conso3m = num(r[23]);
+        const conso1y = num(r[19]);
+        const base = conso3m > 0 ? conso3m : conso1y;
+        // Pseudo-deterministic 30-day history around base demand
+        let seed = 0;
+        for (let i = 0; i < item.length; i++) seed = (seed * 31 + item.charCodeAt(i)) >>> 0;
+        const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 0xffffffff; };
+        const history = base > 0
+          ? Array.from({ length: 30 }, () => Math.max(0, Math.round(base * (0.7 + rand() * 0.6) * 100) / 100))
+          : Array(30).fill(0);
+        return {
+          user_id: user.id,
+          sku_code: item,
+          name: item,
+          category: r[11] != null ? String(r[11]).trim() : null,
+          stock, on_order: onOrder,
+          lead_time_days: delay, moq: eoq,
+          unit_cost: lastCost, service_level: 0.95,
+          demand_history: history,
+        };
+      }).filter((r): r is NonNullable<typeof r> => r !== null);
+      if (!rows.length) return toast.error("No valid rows in ELKA file");
+      // Insert in chunks of 500 to stay within payload limits
+      const chunkSize = 500;
+      let inserted = 0;
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        const { error } = await supabase.from("skus").insert(chunk);
+        if (error) { toast.error(`Chunk ${i}: ${error.message}`); break; }
+        inserted += chunk.length;
+      }
+      toast.success(`Imported ${inserted} SKUs from ELKA file`);
+      load();
+    } catch (e) {
+      toast.error(`Failed to parse Excel: ${(e as Error).message}`);
+    }
+  }
     if (!confirm("Delete this SKU?")) return;
     const { error } = await supabase.from("skus").delete().eq("id", id);
     if (error) toast.error(error.message);
