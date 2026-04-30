@@ -189,6 +189,8 @@ function SkusPage() {
       toast.error(`Failed to parse Excel: ${(e as Error).message}`);
     }
   }
+
+  async function remove(id: string) {
     if (!confirm("Delete this SKU?")) return;
     const { error } = await supabase.from("skus").delete().eq("id", id);
     if (error) toast.error(error.message);
