@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize } from "@/lib/optimizer";
@@ -14,12 +14,13 @@ export const Route = createFileRoute("/dashboard/")({
 });
 
 function Overview() {
+  const navigate = useNavigate();
   const [skus, setSkus] = useState<Sku[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     supabase.from("skus").select("*").then(({ data }) => {
-      setSkus(data ?? []);
+      setSkus((data as Sku[] | null) ?? []);
       setLoading(false);
     });
   }, []);
@@ -36,35 +37,42 @@ function Overview() {
     reorder: s.opt.reorderPoint,
   }));
 
+  const goToSkus = (filter?: Record<string, string>) =>
+    navigate({ to: "/dashboard/skus", search: filter });
+
   const stats = [
-    { label: "Active SKUs", value: total, icon: Boxes, color: "from-primary to-primary-glow" },
-    { label: "To reorder", value: toReorder, icon: TrendingUp, color: "from-warning to-warning" },
-    { label: "Critical", value: critical, icon: AlertTriangle, color: "from-destructive to-destructive" },
-    { label: "Inventory value", value: `$${inventoryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: DollarSign, color: "from-success to-success" },
-  ];
+    { label: "Active SKUs", value: total, icon: Boxes, color: "from-primary to-primary-glow", filter: undefined },
+    { label: "To reorder", value: toReorder, icon: TrendingUp, color: "from-warning to-warning", filter: { reorder: "1" } },
+    { label: "Critical", value: critical, icon: AlertTriangle, color: "from-destructive to-destructive", filter: { status: "critical" } },
+    { label: "Inventory value", value: `$${inventoryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: DollarSign, color: "from-success to-success", filter: undefined },
+  ] as const;
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-        <p className="text-muted-foreground mt-1">Real-time view of your inventory health.</p>
+        <p className="text-muted-foreground mt-1">Real-time view of your inventory health. Click any card or bar to drill down.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl border border-border bg-card p-5">
+          <button
+            key={s.label}
+            onClick={() => goToSkus(s.filter)}
+            className="text-left rounded-2xl border border-border bg-card p-5 hover:border-primary/50 hover:shadow-[var(--shadow-elegant)] transition-all"
+          >
             <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-3`}>
               <s.icon className="h-5 w-5 text-white" />
             </div>
             <div className="text-2xl font-bold">{loading ? "—" : s.value}</div>
             <div className="text-sm text-muted-foreground">{s.label}</div>
-          </div>
+          </button>
         ))}
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-lg font-semibold mb-1">Stock vs reorder point</h2>
-        <p className="text-sm text-muted-foreground mb-6">Top 10 SKUs — bars below the orange line need attention.</p>
+        <p className="text-sm text-muted-foreground mb-6">Top 10 SKUs — click a bar to inspect that SKU.</p>
         {loading ? (
           <div className="h-[300px] flex items-center justify-center text-muted-foreground">Loading…</div>
         ) : chartData.length === 0 ? (
@@ -74,13 +82,16 @@ function Overview() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
+            <BarChart data={chartData} onClick={(e) => {
+              const code = (e?.activePayload?.[0]?.payload?.name) as string | undefined;
+              if (code) goToSkus({ q: code });
+            }}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.01 255)" />
               <XAxis dataKey="name" stroke="oklch(0.5 0.03 255)" fontSize={12} />
               <YAxis stroke="oklch(0.5 0.03 255)" fontSize={12} />
               <Tooltip contentStyle={{ background: "white", border: "1px solid oklch(0.92 0.01 255)", borderRadius: 8 }} />
-              <Bar dataKey="stock" fill="oklch(0.52 0.22 270)" radius={[6, 6, 0, 0]} name="Current stock" />
-              <Bar dataKey="reorder" fill="oklch(0.75 0.17 75)" radius={[6, 6, 0, 0]} name="Reorder point" />
+              <Bar dataKey="stock" fill="oklch(0.52 0.22 270)" radius={[6, 6, 0, 0]} name="Current stock" cursor="pointer" />
+              <Bar dataKey="reorder" fill="oklch(0.75 0.17 75)" radius={[6, 6, 0, 0]} name="Reorder point" cursor="pointer" />
             </BarChart>
           </ResponsiveContainer>
         )}
