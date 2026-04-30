@@ -1,1 +1,4 @@
 project_id = "wyaamqydlrfxmtabujze"
+
+[functions.optimize-min-max]
+verify_jwt = true
