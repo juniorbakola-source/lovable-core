@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
@@ -87,6 +87,42 @@ function SkusPage() {
     load();
   }
 
+  async function importCsv(file: File) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) return toast.error("CSV is empty");
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const required = ["sku_code", "name"];
+    if (!required.every((r) => headers.includes(r))) {
+      return toast.error("CSV must include sku_code and name columns");
+    }
+    const rows = lines.slice(1).map((line) => {
+      const cells = line.split(",").map((c) => c.trim());
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => (row[h] = cells[i] ?? ""));
+      return {
+        user_id: user.id,
+        sku_code: row.sku_code,
+        name: row.name,
+        category: row.category || null,
+        stock: Number(row.stock || 0),
+        on_order: Number(row.on_order || 0),
+        lead_time_days: Number(row.lead_time_days || 7),
+        moq: Number(row.moq || 1),
+        unit_cost: Number(row.unit_cost || 0),
+        service_level: Number(row.service_level || 0.95),
+        demand_history: (row.demand_history || "")
+          .split(/[;|]/).map((n) => Number(n)).filter((n) => !isNaN(n) && n >= 0),
+      };
+    }).filter((r) => r.sku_code && r.name);
+    if (!rows.length) return toast.error("No valid rows");
+    const { error } = await supabase.from("skus").insert(rows);
+    if (error) toast.error(error.message);
+    else { toast.success(`Imported ${rows.length} SKUs`); load(); }
+  }
+
   async function remove(id: string) {
     if (!confirm("Delete this SKU?")) return;
     const { error } = await supabase.from("skus").delete().eq("id", id);
@@ -103,10 +139,17 @@ function SkusPage() {
           <h1 className="text-3xl font-bold tracking-tight">SKUs</h1>
           <p className="text-muted-foreground mt-1">Manage your inventory and view optimization recommendations.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button variant="hero" onClick={openNew}><Plus className="h-4 w-4" /> Add SKU</Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <label className="inline-flex">
+            <input type="file" accept=".csv" className="hidden" onChange={(e) => {
+              const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = "";
+            }} />
+            <Button asChild variant="outline"><span><Upload className="h-4 w-4" /> Import CSV</span></Button>
+          </label>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button variant="hero" onClick={openNew}><Plus className="h-4 w-4" /> Add SKU</Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit SKU" : "New SKU"}</DialogTitle>
@@ -131,7 +174,8 @@ function SkusPage() {
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
