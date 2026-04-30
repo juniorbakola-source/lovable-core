@@ -174,7 +174,8 @@ function SkusPage() {
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
