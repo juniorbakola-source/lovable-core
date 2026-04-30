@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { LayoutDashboard, Boxes, LogOut, Settings } from "lucide-react";
+import { LayoutDashboard, Boxes, LogOut, Settings, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -28,6 +28,8 @@ function DashboardLayout() {
   const nav = [
     { to: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
     { to: "/dashboard/skus", label: "SKUs", icon: Boxes },
+    { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+    { to: "/dashboard/settings", label: "Settings", icon: Settings },
   ];
 
   async function signOut() {
