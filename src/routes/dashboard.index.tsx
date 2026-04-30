@@ -83,7 +83,7 @@ function Overview() {
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartData} onClick={(e) => {
-              const code = (e?.activePayload?.[0]?.payload?.name) as string | undefined;
+              const code = ((e as { activePayload?: { payload?: { name?: string } }[] })?.activePayload?.[0]?.payload?.name) as string | undefined;
               if (code) goToSkus({ q: code });
             }}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.01 255)" />

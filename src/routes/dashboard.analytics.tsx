@@ -129,7 +129,7 @@ function AnalyticsPage() {
           {valueByCategory.length === 0 ? <Empty /> : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={valueByCategory} onClick={(e) => {
-                const cat = e?.activePayload?.[0]?.payload?.name as string | undefined;
+                const cat = (e as { activePayload?: { payload?: { name?: string } }[] })?.activePayload?.[0]?.payload?.name as string | undefined;
                 if (cat) goToSkus({ category: cat });
               }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.01 255)" />
@@ -162,7 +162,7 @@ function AnalyticsPage() {
           {topMovers.length === 0 ? <Empty /> : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={topMovers} layout="vertical" onClick={(e) => {
-                const code = e?.activePayload?.[0]?.payload?.name as string | undefined;
+                const code = (e as { activePayload?: { payload?: { name?: string } }[] })?.activePayload?.[0]?.payload?.name as string | undefined;
                 if (code) goToSkus({ q: code });
               }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.01 255)" />
