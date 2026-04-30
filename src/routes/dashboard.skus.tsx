@@ -213,6 +213,12 @@ function SkusPage() {
             }} />
             <Button asChild variant="outline"><span><Upload className="h-4 w-4" /> Import CSV</span></Button>
           </label>
+          <label className="inline-flex">
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => {
+              const f = e.target.files?.[0]; if (f) importElkaXlsx(f); e.target.value = "";
+            }} />
+            <Button asChild variant="outline"><span><FileSpreadsheet className="h-4 w-4" /> Import ELKA</span></Button>
+          </label>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button variant="hero" onClick={openNew}><Plus className="h-4 w-4" /> Add SKU</Button>
