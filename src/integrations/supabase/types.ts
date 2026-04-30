@@ -140,13 +140,58 @@ export type Database = {
         }
         Relationships: []
       }
+      optimization_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          model: string | null
+          skus_processed: number
+          skus_succeeded: number
+          status: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          model?: string | null
+          skus_processed?: number
+          skus_succeeded?: number
+          status?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          model?: string | null
+          skus_processed?: number
+          skus_succeeded?: number
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       skus: {
         Row: {
+          ai_justification: string | null
+          ai_max_recommended: number | null
+          ai_min_recommended: number | null
+          ai_optimized_at: string | null
           category: string | null
           created_at: string
           demand_history: number[]
+          demand_history_yearly: number[]
+          forecast_3m: number[]
           id: string
+          in_production: number
           lead_time_days: number
+          max_stock: number | null
+          min_stock: number | null
           moq: number
           name: string
           on_order: number
@@ -158,11 +203,20 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_justification?: string | null
+          ai_max_recommended?: number | null
+          ai_min_recommended?: number | null
+          ai_optimized_at?: string | null
           category?: string | null
           created_at?: string
           demand_history?: number[]
+          demand_history_yearly?: number[]
+          forecast_3m?: number[]
           id?: string
+          in_production?: number
           lead_time_days?: number
+          max_stock?: number | null
+          min_stock?: number | null
           moq?: number
           name: string
           on_order?: number
@@ -174,11 +228,20 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_justification?: string | null
+          ai_max_recommended?: number | null
+          ai_min_recommended?: number | null
+          ai_optimized_at?: string | null
           category?: string | null
           created_at?: string
           demand_history?: number[]
+          demand_history_yearly?: number[]
+          forecast_3m?: number[]
           id?: string
+          in_production?: number
           lead_time_days?: number
+          max_stock?: number | null
+          min_stock?: number | null
           moq?: number
           name?: string
           on_order?: number
