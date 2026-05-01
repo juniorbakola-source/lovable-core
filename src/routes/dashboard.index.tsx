@@ -1,97 +1,243 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, useSearch, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize } from "@/lib/optimizer";
-import { Boxes, AlertTriangle, TrendingUp, DollarSign } from "lucide-react";
+import { seedDemoData } from "@/lib/demo-seed";
+import { Boxes, AlertTriangle, TrendingUp, DollarSign, Sparkles, Truck, ShoppingCart } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
 
 export const Route = createFileRoute("/dashboard/")({
-  head: () => ({ meta: [{ title: "Overview — FlowStock Pro" }] }),
+  head: () => ({ meta: [{ title: "Vue Globale — FlowStockAI" }] }),
   component: Overview,
 });
 
 function Overview() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [skus, setSkus] = useState<Sku[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
 
-  useEffect(() => {
-    supabase.from("skus").select("*").then(({ data }) => {
-      setSkus((data as Sku[] | null) ?? []);
-      setLoading(false);
-    });
-  }, []);
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase.from("skus").select("*");
+    setSkus((data as Sku[] | null) ?? []);
+    setLoading(false);
+  }
 
-  const enriched = skus.map((s) => ({ ...s, opt: optimize(s) }));
+  useEffect(() => { load(); }, []);
+
+  async function handleSeed() {
+    if (!user) return;
+    setSeeding(true);
+    try {
+      const { inserted } = await seedDemoData(user.id);
+      toast.success(`${inserted} SKUs de démo créés`);
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg);
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  const enriched = useMemo(() => skus.map((s) => ({ ...s, opt: optimize(s) })), [skus]);
   const total = enriched.length;
-  const toReorder = enriched.filter((s) => s.opt.recommendedOrder > 0).length;
   const critical = enriched.filter((s) => s.opt.status === "critical").length;
+  const toReorder = enriched.filter((s) => s.opt.recommendedOrder > 0).length;
   const inventoryValue = enriched.reduce((acc, s) => acc + s.opt.inventoryValue, 0);
+  const monthlyHolding = enriched.reduce((acc, s) => acc + s.stock * Number(s.unit_cost) * 0.02, 0);
+  const monthlyShortage = enriched
+    .filter((s) => s.opt.status === "critical" || s.opt.status === "low")
+    .reduce((acc, s) => acc + s.opt.recommendedOrder * Number(s.unit_cost) * 0.15, 0);
+
+  // Health distribution
+  const opt = enriched.filter((s) => s.opt.status === "ok").length;
+  const reappro = enriched.filter((s) => s.opt.status === "low").length;
+  const alert = enriched.filter((s) => s.opt.status === "critical").length;
+  const surstock = enriched.filter((s) => s.opt.status === "overstock").length;
+  const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
+
+  const urgent = enriched
+    .filter((s) => s.opt.recommendedOrder > 0)
+    .sort((a, b) => b.opt.recommendedOrder * Number(b.unit_cost) - a.opt.recommendedOrder * Number(a.unit_cost))
+    .slice(0, 3);
 
   const chartData = enriched.slice(0, 10).map((s) => ({
     name: s.sku_code,
     stock: s.stock,
-    reorder: s.opt.reorderPoint,
+    rop: s.opt.reorderPoint,
   }));
 
-  const goToSkus = (filter?: Record<string, string>) =>
-    navigate({ to: "/dashboard/skus", search: filter });
-
-  const stats = [
-    { label: "Active SKUs", value: total, icon: Boxes, color: "from-primary to-primary-glow", filter: undefined },
-    { label: "To reorder", value: toReorder, icon: TrendingUp, color: "from-warning to-warning", filter: { reorder: "1" } },
-    { label: "Critical", value: critical, icon: AlertTriangle, color: "from-destructive to-destructive", filter: { status: "critical" } },
-    { label: "Inventory value", value: `$${inventoryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: DollarSign, color: "from-success to-success", filter: undefined },
-  ] as const;
+  if (!loading && total === 0) {
+    return (
+      <div className="p-8 max-w-3xl mx-auto">
+        <div className="rounded-2xl border border-border bg-card p-10 text-center">
+          <Sparkles className="h-12 w-12 text-primary mx-auto mb-4" />
+          <h1 className="text-2xl font-bold mb-2">Bienvenue sur FlowStockAI</h1>
+          <p className="text-muted-foreground mb-6">
+            Aucun SKU pour l'instant. Charge un jeu de démo (10 SKUs avec 12 mois d'historique IA) pour explorer la plateforme.
+          </p>
+          <button
+            onClick={handleSeed}
+            disabled={seeding}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-glow text-primary-foreground font-bold text-sm hover:shadow-[var(--shadow-elegant)] transition-all disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4" /> {seeding ? "Génération…" : "Charger les données de démo"}
+          </button>
+          <div className="mt-6 text-xs text-muted-foreground">
+            Ou <Link to="/dashboard/skus" className="text-primary underline">crée tes SKUs manuellement</Link>.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-        <p className="text-muted-foreground mt-1">Real-time view of your inventory health. Click any card or bar to drill down.</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Tableau de bord</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Vue globale des stocks et opérations — flux temps réel.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary text-xs font-mono font-bold">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+          Flux Synchro Temps Réel
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {stats.map((s) => (
-          <button
-            key={s.label}
-            onClick={() => goToSkus(s.filter)}
-            className="text-left rounded-2xl border border-border bg-card p-5 hover:border-primary/50 hover:shadow-[var(--shadow-elegant)] transition-all"
-          >
-            <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-3`}>
-              <s.icon className="h-5 w-5 text-white" />
-            </div>
-            <div className="text-2xl font-bold">{loading ? "—" : s.value}</div>
-            <div className="text-sm text-muted-foreground">{s.label}</div>
-          </button>
-        ))}
+      {/* KPI Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <KpiCard
+          label="Valeur totale du stock"
+          value={`${inventoryValue.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`}
+          sub="Valorisation au coût d'achat"
+          icon={DollarSign}
+          tone="default"
+          to={{ to: "/dashboard/skus" as const, search: {} }}
+          loading={loading}
+        />
+        <KpiCard
+          label="Risques ruptures (Urgent)"
+          value={`${critical} SKUs`}
+          sub="Stock < 50% de sécurité"
+          icon={AlertTriangle}
+          tone="danger"
+          to={{ to: "/dashboard/skus" as const, search: { status: "critical" } }}
+          loading={loading}
+        />
+        <KpiCard
+          label="Commandes recommandées"
+          value={`${toReorder} SKUs`}
+          sub="Point de commande dépassé"
+          icon={Boxes}
+          tone="warning"
+          to={{ to: "/dashboard/solver" as const, search: {} }}
+          loading={loading}
+        />
+        <KpiCard
+          label="Commandes en cours (PO)"
+          value="0 active"
+          sub="En attente ou transit"
+          icon={Truck}
+          tone="info"
+          to={{ to: "/dashboard/pos" as const, search: {} }}
+          loading={loading}
+        />
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold mb-1">Stock vs reorder point</h2>
-        <p className="text-sm text-muted-foreground mb-6">Top 10 SKUs — click a bar to inspect that SKU.</p>
-        {loading ? (
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground">Loading…</div>
-        ) : chartData.length === 0 ? (
-          <div className="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
-            <Boxes className="h-10 w-10 mb-2 opacity-50" />
-            No SKUs yet — add one from the SKUs page.
+      {/* Health + Recos */}
+      <div className="grid lg:grid-cols-2 gap-4 mb-6">
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <h2 className="text-base font-bold mb-1 flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" /> Santé du Catalogue Stock ({total} SKUs)
+          </h2>
+          <p className="text-xs text-muted-foreground mb-4">Distribution des statuts d'optimisation.</p>
+          <div className="flex h-3 rounded-full overflow-hidden mb-4 border border-border">
+            {opt > 0 && <div style={{ width: `${pct(opt)}%` }} className="bg-success" />}
+            {reappro > 0 && <div style={{ width: `${pct(reappro)}%` }} className="bg-warning" />}
+            {alert > 0 && <div style={{ width: `${pct(alert)}%` }} className="bg-destructive" />}
+            {surstock > 0 && <div style={{ width: `${pct(surstock)}%` }} className="bg-chart-5" />}
           </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <Legend color="success" label="Optimal" pct={pct(opt)} />
+            <Legend color="warning" label="Réappro" pct={pct(reappro)} />
+            <Legend color="destructive" label="Alerte Rupture" pct={pct(alert)} />
+            <Legend color="chart-5" label="Surstock" pct={pct(surstock)} />
+          </div>
+          <div className="mt-5 pt-4 border-t border-border space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Coût total de possession / mois :</span>
+              <span className="font-mono font-bold text-warning">{monthlyHolding.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Coût de rupture estimé / mois :</span>
+              <span className="font-mono font-bold text-destructive">{monthlyShortage.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-bold flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" /> Recommandations Moteur IA
+            </h2>
+            <Link to="/dashboard/solver" className="text-xs text-primary font-bold hover:underline">
+              Gérer les appros →
+            </Link>
+          </div>
+          {urgent.length === 0 ? (
+            <div className="text-center text-muted-foreground text-xs py-8">
+              Aucune action urgente. Tous tes SKUs sont au vert.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {urgent.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-border bg-background/50">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
+                        {s.sku_code}
+                      </span>
+                      <span className="text-xs font-medium truncate">{s.name}</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground font-mono">
+                      Stock: {s.stock} u | ROP: {s.opt.reorderPoint} u | Invest: {(s.opt.recommendedOrder * Number(s.unit_cost)).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Recommandé</div>
+                    <div className="text-sm font-bold text-primary">+{s.opt.recommendedOrder} u</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bar chart */}
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-base font-bold mb-1">Stock vs Point de commande</h2>
+        <p className="text-xs text-muted-foreground mb-6">Top 10 SKUs — clique sur une barre pour inspecter.</p>
+        {chartData.length === 0 ? (
+          <div className="h-[300px] flex items-center justify-center text-muted-foreground">Chargement…</div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} onClick={(e) => {
-              const code = ((e as { activePayload?: { payload?: { name?: string } }[] })?.activePayload?.[0]?.payload?.name) as string | undefined;
-              if (code) goToSkus({ q: code });
-            }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.01 255)" />
-              <XAxis dataKey="name" stroke="oklch(0.5 0.03 255)" fontSize={12} />
-              <YAxis stroke="oklch(0.5 0.03 255)" fontSize={12} />
-              <Tooltip contentStyle={{ background: "white", border: "1px solid oklch(0.92 0.01 255)", borderRadius: 8 }} />
-              <Bar dataKey="stock" fill="oklch(0.52 0.22 270)" radius={[6, 6, 0, 0]} name="Current stock" cursor="pointer" />
-              <Bar dataKey="reorder" fill="oklch(0.75 0.17 75)" radius={[6, 6, 0, 0]} name="Reorder point" cursor="pointer" />
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={11} />
+              <YAxis stroke="var(--muted-foreground)" fontSize={11} />
+              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }} />
+              <Bar dataKey="stock" fill="var(--primary)" radius={[6, 6, 0, 0]} name="Stock actuel" />
+              <Bar dataKey="rop" fill="var(--warning)" radius={[6, 6, 0, 0]} name="ROP" />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -99,3 +245,49 @@ function Overview() {
     </div>
   );
 }
+
+function KpiCard({
+  label, value, sub, icon: Icon, tone, to, loading,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  icon: typeof Boxes;
+  tone: "default" | "danger" | "warning" | "info";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  to: any;
+  loading: boolean;
+}) {
+  const ring = tone === "danger" ? "border-destructive/60" : tone === "warning" ? "border-warning/60" : tone === "info" ? "border-primary/40" : "border-border";
+  const iconColor = tone === "danger" ? "text-destructive" : tone === "warning" ? "text-warning" : tone === "info" ? "text-primary" : "text-primary";
+  return (
+    <Link
+      {...to}
+      className={`block rounded-2xl border ${ring} bg-card p-4 hover:border-primary/60 hover:shadow-[var(--shadow-elegant)] transition-all`}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{label}</div>
+        <Icon className={`h-4 w-4 ${iconColor}`} />
+      </div>
+      <div className="text-2xl font-bold mb-1">{loading ? "—" : value}</div>
+      <div className="text-[11px] text-muted-foreground">{sub}</div>
+    </Link>
+  );
+}
+
+function Legend({ color, label, pct }: { color: string; label: string; pct: number }) {
+  const bg =
+    color === "success" ? "bg-success" :
+    color === "warning" ? "bg-warning" :
+    color === "destructive" ? "bg-destructive" : "bg-chart-5";
+  return (
+    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border">
+      <span className={`h-2 w-2 rounded-full ${bg}`} />
+      <span className="font-medium text-foreground/80">{label}</span>
+      <span className="ml-auto font-mono text-muted-foreground">{pct}%</span>
+    </div>
+  );
+}
+
+// Avoid unused import warning when icon not referenced elsewhere
+void ShoppingCart;

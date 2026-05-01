@@ -14,9 +14,12 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
+import { Route as DashboardWhatifRouteImport } from './routes/dashboard.whatif'
+import { Route as DashboardSolverRouteImport } from './routes/dashboard.solver'
 import { Route as DashboardSkusRouteImport } from './routes/dashboard.skus'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
-import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard.analytics'
+import { Route as DashboardPosRouteImport } from './routes/dashboard.pos'
+import { Route as DashboardForecastingRouteImport } from './routes/dashboard.forecasting'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -43,6 +46,16 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardWhatifRoute = DashboardWhatifRouteImport.update({
+  id: '/whatif',
+  path: '/whatif',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSolverRoute = DashboardSolverRouteImport.update({
+  id: '/solver',
+  path: '/solver',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardSkusRoute = DashboardSkusRouteImport.update({
   id: '/skus',
   path: '/skus',
@@ -53,9 +66,14 @@ const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
+const DashboardPosRoute = DashboardPosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardForecastingRoute = DashboardForecastingRouteImport.update({
+  id: '/forecasting',
+  path: '/forecasting',
   getParentRoute: () => DashboardRoute,
 } as any)
 
@@ -64,18 +82,24 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/forecasting': typeof DashboardForecastingRoute
+  '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/skus': typeof DashboardSkusRoute
+  '/dashboard/solver': typeof DashboardSolverRoute
+  '/dashboard/whatif': typeof DashboardWhatifRoute
   '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/forecasting': typeof DashboardForecastingRoute
+  '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/skus': typeof DashboardSkusRoute
+  '/dashboard/solver': typeof DashboardSolverRoute
+  '/dashboard/whatif': typeof DashboardWhatifRoute
   '/dashboard': typeof DashboardIndexRoute
 }
 export interface FileRoutesById {
@@ -84,9 +108,12 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/forecasting': typeof DashboardForecastingRoute
+  '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/skus': typeof DashboardSkusRoute
+  '/dashboard/solver': typeof DashboardSolverRoute
+  '/dashboard/whatif': typeof DashboardWhatifRoute
   '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRouteTypes {
@@ -96,18 +123,24 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/signup'
-    | '/dashboard/analytics'
+    | '/dashboard/forecasting'
+    | '/dashboard/pos'
     | '/dashboard/settings'
     | '/dashboard/skus'
+    | '/dashboard/solver'
+    | '/dashboard/whatif'
     | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/signup'
-    | '/dashboard/analytics'
+    | '/dashboard/forecasting'
+    | '/dashboard/pos'
     | '/dashboard/settings'
     | '/dashboard/skus'
+    | '/dashboard/solver'
+    | '/dashboard/whatif'
     | '/dashboard'
   id:
     | '__root__'
@@ -115,9 +148,12 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/signup'
-    | '/dashboard/analytics'
+    | '/dashboard/forecasting'
+    | '/dashboard/pos'
     | '/dashboard/settings'
     | '/dashboard/skus'
+    | '/dashboard/solver'
+    | '/dashboard/whatif'
     | '/dashboard/'
   fileRoutesById: FileRoutesById
 }
@@ -165,6 +201,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/whatif': {
+      id: '/dashboard/whatif'
+      path: '/whatif'
+      fullPath: '/dashboard/whatif'
+      preLoaderRoute: typeof DashboardWhatifRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/solver': {
+      id: '/dashboard/solver'
+      path: '/solver'
+      fullPath: '/dashboard/solver'
+      preLoaderRoute: typeof DashboardSolverRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/skus': {
       id: '/dashboard/skus'
       path: '/skus'
@@ -179,27 +229,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/analytics': {
-      id: '/dashboard/analytics'
-      path: '/analytics'
-      fullPath: '/dashboard/analytics'
-      preLoaderRoute: typeof DashboardAnalyticsRouteImport
+    '/dashboard/pos': {
+      id: '/dashboard/pos'
+      path: '/pos'
+      fullPath: '/dashboard/pos'
+      preLoaderRoute: typeof DashboardPosRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/forecasting': {
+      id: '/dashboard/forecasting'
+      path: '/forecasting'
+      fullPath: '/dashboard/forecasting'
+      preLoaderRoute: typeof DashboardForecastingRouteImport
       parentRoute: typeof DashboardRoute
     }
   }
 }
 
 interface DashboardRouteChildren {
-  DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
+  DashboardForecastingRoute: typeof DashboardForecastingRoute
+  DashboardPosRoute: typeof DashboardPosRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardSkusRoute: typeof DashboardSkusRoute
+  DashboardSolverRoute: typeof DashboardSolverRoute
+  DashboardWhatifRoute: typeof DashboardWhatifRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
-  DashboardAnalyticsRoute: DashboardAnalyticsRoute,
+  DashboardForecastingRoute: DashboardForecastingRoute,
+  DashboardPosRoute: DashboardPosRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardSkusRoute: DashboardSkusRoute,
+  DashboardSolverRoute: DashboardSolverRoute,
+  DashboardWhatifRoute: DashboardWhatifRoute,
   DashboardIndexRoute: DashboardIndexRoute,
 }
 
