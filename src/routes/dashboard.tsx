@@ -13,7 +13,14 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardLayout,
 });
 
-const MENU = [
+type MenuItem = {
+  to: "/dashboard" | "/dashboard/skus" | "/dashboard/forecasting" | "/dashboard/solver" | "/dashboard/whatif" | "/dashboard/pos" | "/dashboard/settings";
+  label: string;
+  icon: typeof BarChart3;
+  exact?: boolean;
+};
+
+const MENU: MenuItem[] = [
   { to: "/dashboard", label: "Vue Globale", icon: BarChart3, exact: true },
   { to: "/dashboard/skus", label: "Gestion SKUs", icon: Package },
   { to: "/dashboard/forecasting", label: "Séries Temporelles IA", icon: TrendingUp },
@@ -21,7 +28,7 @@ const MENU = [
   { to: "/dashboard/whatif", label: "Analyse What-If", icon: Sliders },
   { to: "/dashboard/pos", label: "Bons de Commande", icon: FileText },
   { to: "/dashboard/settings", label: "Paramètres", icon: Settings },
-] as const;
+];
 
 function DashboardLayout() {
   const { user, loading } = useAuth();
