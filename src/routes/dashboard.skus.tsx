@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2, Pencil, Upload, FileSpreadsheet, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 
@@ -155,9 +155,41 @@ function SkusPage() {
     if (!user) return;
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null }) as (string | number | null)[][];
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buf);
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) return toast.error("No sheet found in ELKA file");
+
+      // Build a 0-indexed dense matrix matching the original xlsx sheet_to_json layout.
+      // ExcelJS row.values is 1-indexed (index 0 is always undefined).
+      const normalizeCell = (v: ExcelJS.CellValue): string | number | null => {
+        if (v === null || v === undefined) return null;
+        if (typeof v === "number") return v;
+        if (typeof v === "string") return v;
+        if (typeof v === "object") {
+          if ("result" in v) {
+            const r = (v as ExcelJS.CellFormulaValue).result;
+            return typeof r === "number" ? r : r != null ? String(r) : null;
+          }
+          if ("richText" in v) {
+            return (v as ExcelJS.CellRichTextValue).richText.map((rt) => rt.text).join("");
+          }
+          if ("text" in v) return (v as ExcelJS.CellHyperlinkValue).text;
+        }
+        return null;
+      };
+
+      const matrix: (string | number | null)[][] = [];
+      worksheet.eachRow({ includeEmpty: true }, (row) => {
+        const colCount = Math.max(worksheet.columnCount, 28);
+        const rowArr: (string | number | null)[] = [];
+        const values = row.values as ExcelJS.CellValue[];
+        for (let c = 1; c <= colCount; c++) {
+          rowArr.push(normalizeCell(values[c] ?? null));
+        }
+        matrix.push(rowArr);
+      });
+
       const dataRows = matrix.slice(4);
       const seen = new Set<string>();
       const rows = dataRows.map((r) => {

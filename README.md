@@ -22,6 +22,7 @@
 | Frontend | React 19, TanStack Router, Tailwind CSS v4 |
 | Moteur S&OP | TypeScript pur (`sop-engine/`) |
 | Backend | Supabase (auth + base de données) |
+| Excel import | ExcelJS 4.x (remplacement de xlsx suite à vulnérabilités CVE) |
 | Build | Vite 7 + Cloudflare Workers |
 
 ---
