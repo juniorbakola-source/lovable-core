@@ -176,6 +176,62 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_orders: {
+        Row: {
+          created_at: string
+          expected_at: string | null
+          id: string
+          notes: string | null
+          ordered_at: string | null
+          po_number: string
+          quantity: number
+          received_at: string | null
+          sku_id: string
+          status: string
+          unit_cost: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expected_at?: string | null
+          id?: string
+          notes?: string | null
+          ordered_at?: string | null
+          po_number: string
+          quantity: number
+          received_at?: string | null
+          sku_id: string
+          status?: string
+          unit_cost?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expected_at?: string | null
+          id?: string
+          notes?: string | null
+          ordered_at?: string | null
+          po_number?: string
+          quantity?: number
+          received_at?: string | null
+          sku_id?: string
+          status?: string
+          unit_cost?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_orders_sku_id_fkey"
+            columns: ["sku_id"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       skus: {
         Row: {
           ai_justification: string | null
