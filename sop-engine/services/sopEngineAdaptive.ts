@@ -42,7 +42,11 @@ export function computeSOPAdaptive(data: any): SOPAdaptiveResult {
     } else {
       lifecycle = "MATURE";
       avgDemand = (0.6 * data.consumption3m + 0.4 * data.consumption12m) / 30;
-      sigma = data.variability || (data.max - data.min) / 4 || avgDemand * 0.3;
+      const rangeEstimate =
+        data.max != null && data.min != null && data.max !== data.min
+          ? (data.max - data.min) / 4
+          : null;
+      sigma = data.variability || rangeEstimate || avgDemand * 0.3;
     }
   } else if (has3M) {
     avgDemand = (data.consumption3m / 90) * 1.2;

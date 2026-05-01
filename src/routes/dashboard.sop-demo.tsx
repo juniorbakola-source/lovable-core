@@ -450,9 +450,9 @@ function SKUCard({ sku, sop, explain, expanded, onToggle, onChange }: SKUCardPro
             </div>
             {/* SOP details grid */}
             <div className="mt-2 pt-3 border-t border-border grid grid-cols-3 gap-2 text-[11px]">
-              <SOPDetail label="Demande moy/j" value={sop.avgDemand.toFixed(1)} />
-              <SOPDetail label="Sigma (σ)" value={sop.sigma.toFixed(2)} />
-              <SOPDetail label="Z utilisé" value={sop.z.toFixed(2)} />
+              <SOPDetail label="Demande moy/j" value={(sop.avgDemand || 0).toFixed(1)} />
+              <SOPDetail label="Sigma (σ)" value={(sop.sigma || 0).toFixed(2)} />
+              <SOPDetail label="Z utilisé" value={(sop.z || 0).toFixed(2)} />
               <SOPDetail label="Safety Stock" value={Math.round(sop.safetyStock)} />
               <SOPDetail label="ROP" value={Math.round(sop.rop)} />
               <SOPDetail label="Projeté" value={Math.round(sop.projected)} />
@@ -558,7 +558,7 @@ function EditableParam({
         min="0"
         value={value}
         onChange={(e) => {
-          const v = parseFloat(e.target.value);
+          const v = e.target.value === "" ? 0 : parseFloat(e.target.value);
           if (!isNaN(v) && v >= 0) onChange(v);
         }}
         className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary"
