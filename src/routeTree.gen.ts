@@ -15,6 +15,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardWhatifRouteImport } from './routes/dashboard.whatif'
+import { Route as DashboardSopDemoRouteImport } from './routes/dashboard.sop-demo'
 import { Route as DashboardSolverRouteImport } from './routes/dashboard.solver'
 import { Route as DashboardSkusRouteImport } from './routes/dashboard.skus'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
@@ -49,6 +50,11 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
 const DashboardWhatifRoute = DashboardWhatifRouteImport.update({
   id: '/whatif',
   path: '/whatif',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSopDemoRoute = DashboardSopDemoRouteImport.update({
+  id: '/sop-demo',
+  path: '/sop-demo',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardSolverRoute = DashboardSolverRouteImport.update({
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/skus': typeof DashboardSkusRoute
   '/dashboard/solver': typeof DashboardSolverRoute
+  '/dashboard/sop-demo': typeof DashboardSopDemoRoute
   '/dashboard/whatif': typeof DashboardWhatifRoute
   '/dashboard/': typeof DashboardIndexRoute
 }
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/skus': typeof DashboardSkusRoute
   '/dashboard/solver': typeof DashboardSolverRoute
+  '/dashboard/sop-demo': typeof DashboardSopDemoRoute
   '/dashboard/whatif': typeof DashboardWhatifRoute
   '/dashboard': typeof DashboardIndexRoute
 }
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/skus': typeof DashboardSkusRoute
   '/dashboard/solver': typeof DashboardSolverRoute
+  '/dashboard/sop-demo': typeof DashboardSopDemoRoute
   '/dashboard/whatif': typeof DashboardWhatifRoute
   '/dashboard/': typeof DashboardIndexRoute
 }
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard/skus'
     | '/dashboard/solver'
+    | '/dashboard/sop-demo'
     | '/dashboard/whatif'
     | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
@@ -140,6 +150,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard/skus'
     | '/dashboard/solver'
+    | '/dashboard/sop-demo'
     | '/dashboard/whatif'
     | '/dashboard'
   id:
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard/skus'
     | '/dashboard/solver'
+    | '/dashboard/sop-demo'
     | '/dashboard/whatif'
     | '/dashboard/'
   fileRoutesById: FileRoutesById
@@ -208,6 +220,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardWhatifRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/sop-demo': {
+      id: '/dashboard/sop-demo'
+      path: '/sop-demo'
+      fullPath: '/dashboard/sop-demo'
+      preLoaderRoute: typeof DashboardSopDemoRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/solver': {
       id: '/dashboard/solver'
       path: '/solver'
@@ -252,6 +271,7 @@ interface DashboardRouteChildren {
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardSkusRoute: typeof DashboardSkusRoute
   DashboardSolverRoute: typeof DashboardSolverRoute
+  DashboardSopDemoRoute: typeof DashboardSopDemoRoute
   DashboardWhatifRoute: typeof DashboardWhatifRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
@@ -262,6 +282,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardSkusRoute: DashboardSkusRoute,
   DashboardSolverRoute: DashboardSolverRoute,
+  DashboardSopDemoRoute: DashboardSopDemoRoute,
   DashboardWhatifRoute: DashboardWhatifRoute,
   DashboardIndexRoute: DashboardIndexRoute,
 }
