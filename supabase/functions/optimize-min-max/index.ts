@@ -26,7 +26,9 @@ interface SkuRow {
 
 const MODEL = "google/gemini-3-flash-preview";
 
-async function optimizeBatch(skus: SkuRow[]): Promise<Map<string, { min: number; max: number; justification: string }>> {
+async function optimizeBatch(
+  skus: SkuRow[],
+): Promise<Map<string, { min: number; max: number; justification: string }>> {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
 
@@ -126,30 +128,53 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!authHeader)
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnon = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseService = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnon =
+      Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+    const supabaseService = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseAnon || !supabaseService) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Missing Supabase environment variables. Ensure SUPABASE_URL, SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY), and SUPABASE_SERVICE_ROLE_KEY are set.",
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const userClient = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
     const userId = userData.user.id;
 
     const admin = createClient(supabaseUrl, supabaseService);
     const { data: skus, error: skusErr } = await admin
       .from("skus")
-      .select("id, sku_code, name, category, stock, on_order, in_production, lead_time_days, moq, unit_cost, service_level, demand_history, demand_history_yearly, forecast_3m")
+      .select(
+        "id, sku_code, name, category, stock, on_order, in_production, lead_time_days, moq, unit_cost, service_level, demand_history, demand_history_yearly, forecast_3m",
+      )
       .eq("user_id", userId);
 
     if (skusErr) throw skusErr;
     if (!skus || skus.length === 0) {
-      return new Response(JSON.stringify({ error: "No SKUs to optimize" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "No SKUs to optimize" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Create run record
@@ -186,28 +211,46 @@ Deno.serve(async (req) => {
         succeeded += recs.size;
       }
 
-      await admin.from("optimization_runs").update({
-        status: "completed",
-        skus_succeeded: succeeded,
-        completed_at: new Date().toISOString(),
-      }).eq("id", run!.id);
+      await admin
+        .from("optimization_runs")
+        .update({
+          status: "completed",
+          skus_succeeded: succeeded,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", run!.id);
 
-      return new Response(JSON.stringify({ ok: true, processed: skus.length, succeeded, runId: run!.id }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ ok: true, processed: skus.length, succeeded, runId: run!.id }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      await admin.from("optimization_runs").update({
-        status: "failed",
-        error_message: message,
-        completed_at: new Date().toISOString(),
-      }).eq("id", run!.id);
+      await admin
+        .from("optimization_runs")
+        .update({
+          status: "failed",
+          error_message: message,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", run!.id);
       throw e;
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("optimize-min-max error:", message);
     const status = message.includes("429") ? 429 : message.includes("402") ? 402 : 500;
-    return new Response(JSON.stringify({ error: message }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const clientErrorMessage =
+      status === 429
+        ? "Rate limit reached. Please retry in a moment."
+        : status === 402
+          ? "Billing limit reached for AI optimization."
+          : "Optimization failed. Please retry later.";
+    return new Response(JSON.stringify({ error: clientErrorMessage }), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
