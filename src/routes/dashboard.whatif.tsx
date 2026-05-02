@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize, zScore } from "@/lib/optimizer";
+import { toSkuInput, safeNum } from "@/lib/sku-helpers";
 import type { Database } from "@/integrations/supabase/types";
 import { Sliders } from "lucide-react";
 
@@ -25,22 +26,23 @@ function WhatIfPage() {
       setSkus(list);
       if (list[0]) {
         setSelected(list[0].id);
-        setServiceLevel(Number(list[0].service_level));
-        setLeadTime(list[0].lead_time_days);
+        setServiceLevel(safeNum(list[0].service_level, 0.95));
+        setLeadTime(safeNum(list[0].lead_time_days, 7));
       }
     });
   }, []);
 
   const sku = skus.find((s) => s.id === selected);
 
-  const baseline = useMemo(() => sku ? optimize(sku) : null, [sku]);
+  const baseline = useMemo(() => sku ? optimize(toSkuInput(sku)) : null, [sku]);
   const simulated = useMemo(() => {
     if (!sku) return null;
-    const adjusted: Sku = {
-      ...sku,
+    const input = toSkuInput(sku);
+    const adjusted = {
+      ...input,
       service_level: serviceLevel,
       lead_time_days: leadTime,
-      demand_history: sku.demand_history.map((v) => Number(v) * demandMultiplier),
+      demand_history: input.demand_history.map((v) => Number(v) * demandMultiplier),
     };
     return optimize(adjusted);
   }, [sku, serviceLevel, leadTime, demandMultiplier]);
@@ -68,8 +70,8 @@ function WhatIfPage() {
             const s = skus.find((x) => x.id === e.target.value);
             setSelected(e.target.value);
             if (s) {
-              setServiceLevel(Number(s.service_level));
-              setLeadTime(s.lead_time_days);
+              setServiceLevel(safeNum(s.service_level, 0.95));
+              setLeadTime(safeNum(s.lead_time_days, 7));
               setDemandMultiplier(1);
             }
           }}
@@ -82,34 +84,13 @@ function WhatIfPage() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4 mb-6">
-        {/* Sliders */}
         <div className="rounded-2xl border border-border bg-card p-6 space-y-6">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Paramètres</h2>
-
-          <SliderRow
-            label="Niveau de service"
-            value={serviceLevel}
-            min={0.9} max={0.99} step={0.01}
-            onChange={setServiceLevel}
-            display={`${(serviceLevel * 100).toFixed(0)}% (z=${zScore(serviceLevel).toFixed(2)})`}
-          />
-          <SliderRow
-            label="Délai de livraison (jours)"
-            value={leadTime}
-            min={1} max={90} step={1}
-            onChange={setLeadTime}
-            display={`${leadTime} jours`}
-          />
-          <SliderRow
-            label="Variation de la demande"
-            value={demandMultiplier}
-            min={0.5} max={2} step={0.1}
-            onChange={setDemandMultiplier}
-            display={`× ${demandMultiplier.toFixed(1)}`}
-          />
+          <SliderRow label="Niveau de service" value={serviceLevel} min={0.9} max={0.99} step={0.01} onChange={setServiceLevel} display={`${(serviceLevel * 100).toFixed(0)}% (z=${zScore(serviceLevel).toFixed(2)})`} />
+          <SliderRow label="Délai de livraison (jours)" value={leadTime} min={1} max={90} step={1} onChange={setLeadTime} display={`${leadTime} jours`} />
+          <SliderRow label="Variation de la demande" value={demandMultiplier} min={0.5} max={2} step={0.1} onChange={setDemandMultiplier} display={`× ${demandMultiplier.toFixed(1)}`} />
         </div>
 
-        {/* Comparison */}
         <div className="rounded-2xl border border-border bg-card p-6">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">Impact</h2>
           <table className="w-full text-sm">
@@ -128,8 +109,8 @@ function WhatIfPage() {
               <CompareRow label="Jours de couverture" base={baseline.daysOfCover} sim={simulated.daysOfCover} unit="j" />
               <CompareRow
                 label="Investissement requis"
-                base={Math.round(baseline.recommendedOrder * Number(sku.unit_cost))}
-                sim={Math.round(simulated.recommendedOrder * Number(sku.unit_cost))}
+                base={Math.round(baseline.recommendedOrder * safeNum(sku.unit_cost))}
+                sim={Math.round(simulated.recommendedOrder * safeNum(sku.unit_cost))}
                 unit="€"
               />
             </tbody>
@@ -140,9 +121,7 @@ function WhatIfPage() {
   );
 }
 
-function SliderRow({
-  label, value, min, max, step, onChange, display,
-}: {
+function SliderRow({ label, value, min, max, step, onChange, display }: {
   label: string; value: number; min: number; max: number; step: number;
   onChange: (v: number) => void; display: string;
 }) {
@@ -152,12 +131,7 @@ function SliderRow({
         <span className="font-bold">{label}</span>
         <span className="font-mono text-primary">{display}</span>
       </div>
-      <input
-        type="range"
-        min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-primary"
-      />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-primary" />
     </div>
   );
 }

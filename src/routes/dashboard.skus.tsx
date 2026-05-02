@@ -2,6 +2,7 @@ import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize, computeMinMax, type OptimizationResult } from "@/lib/optimizer";
+import { toSkuInput } from "@/lib/sku-helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,11 +71,11 @@ function SkusPage() {
   function openEdit(s: Sku) {
     setEditing(s);
     setForm({
-      sku_code: s.sku_code, name: s.name, category: s.category ?? "",
-      stock: s.stock, on_order: s.on_order, in_production: s.in_production ?? 0,
-      lead_time_days: s.lead_time_days, moq: s.moq,
-      unit_cost: Number(s.unit_cost), service_level: Number(s.service_level),
-      demand_history: s.demand_history.join(", "),
+      sku_code: s.sku_code ?? "", name: s.name ?? "", category: s.category ?? "",
+      stock: s.stock ?? 0, on_order: s.on_order ?? 0, in_production: s.in_production ?? 0,
+      lead_time_days: s.lead_time_days ?? 7, moq: s.moq ?? 1,
+      unit_cost: Number(s.unit_cost ?? 0), service_level: Number(s.service_level ?? 0.95),
+      demand_history: (s.demand_history ?? []).join(", "),
       demand_history_yearly: (s.demand_history_yearly ?? []).join(", "),
       forecast_3m: (s.forecast_3m ?? []).join(", "),
     });
@@ -264,14 +265,14 @@ function SkusPage() {
 
   // Apply URL filters (drill-down from Overview / Analytics)
   const filtered = useMemo(() => {
-    const enriched = skus.map((s) => ({ ...s, opt: optimize(s), mm: computeMinMax(s) }));
+    const enriched = skus.map((s) => ({ ...s, opt: optimize(toSkuInput(s)), mm: computeMinMax(toSkuInput(s)) }));
     return enriched.filter((s) => {
       if (search.status && s.opt.status !== search.status) return false;
       if (search.category && (s.category || "Uncategorized") !== search.category) return false;
       if (search.reorder === "1" && s.opt.recommendedOrder <= 0) return false;
       if (search.q) {
         const q = search.q.toLowerCase();
-        if (!s.sku_code.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q)) return false;
+        if (!(s.sku_code ?? "").toLowerCase().includes(q) && !(s.name ?? "").toLowerCase().includes(q)) return false;
       }
       return true;
     });

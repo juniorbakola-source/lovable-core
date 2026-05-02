@@ -1,7 +1,8 @@
-import { createFileRoute, useSearch, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize } from "@/lib/optimizer";
+import { toSkuInput, safeNum } from "@/lib/sku-helpers";
 import type { Database } from "@/integrations/supabase/types";
 import { Cpu, ShoppingCart, AlertTriangle, CheckCircle2, Package } from "lucide-react";
 import { toast } from "sonner";
@@ -16,10 +17,10 @@ export const Route = createFileRoute("/dashboard/solver")({
 
 type StatusKey = "Optimal" | "Réappro" | "Rupture" | "Surstock";
 
-function statusFor(s: Sku & { opt: ReturnType<typeof optimize> }): StatusKey {
-  if (s.opt.status === "critical") return "Rupture";
-  if (s.opt.status === "low") return "Réappro";
-  if (s.opt.status === "overstock") return "Surstock";
+function statusFor(opt: ReturnType<typeof optimize>): StatusKey {
+  if (opt.status === "critical") return "Rupture";
+  if (opt.status === "low") return "Réappro";
+  if (opt.status === "overstock") return "Surstock";
   return "Optimal";
 }
 
@@ -45,7 +46,10 @@ function SolverPage() {
   useEffect(() => { load(); }, []);
 
   const rows = useMemo(
-    () => skus.map((s) => ({ ...s, opt: optimize(s) })).map((s) => ({ ...s, statusKey: statusFor(s) })),
+    () => skus.map((s) => {
+      const opt = optimize(toSkuInput(s));
+      return { ...s, opt, statusKey: statusFor(opt) };
+    }),
     [skus],
   );
 
@@ -61,12 +65,12 @@ function SolverPage() {
       const inserts = recommended.map((r) => ({
         user_id: uid,
         sku_id: r.id,
-        po_number: `PO-${Date.now()}-${r.sku_code}`,
+        po_number: `PO-${Date.now()}-${r.sku_code ?? ""}`,
         quantity: r.opt.recommendedOrder,
-        unit_cost: Number(r.unit_cost),
+        unit_cost: safeNum(r.unit_cost),
         status: "draft" as const,
         ordered_at: new Date().toISOString(),
-        expected_at: new Date(Date.now() + r.lead_time_days * 86400000).toISOString(),
+        expected_at: new Date(Date.now() + safeNum(r.lead_time_days, 30) * 86400000).toISOString(),
       }));
       const { error } = await supabase.from("purchase_orders").insert(inserts);
       if (error) throw error;
@@ -128,7 +132,7 @@ function SolverPage() {
                 const st = STATUS_STYLES[r.statusKey];
                 const Icon = st.icon;
                 const forecast30 = Math.round(r.opt.avgDailyDemand * 30);
-                const ruptureCost = r.statusKey === "Rupture" ? r.opt.recommendedOrder * Number(r.unit_cost) * 0.15 : 0;
+                const ruptureCost = r.statusKey === "Rupture" ? r.opt.recommendedOrder * safeNum(r.unit_cost) * 0.15 : 0;
                 return (
                   <tr key={r.id} className="border-t border-border hover:bg-secondary/30">
                     <td className="px-3 py-3 font-mono font-bold">{r.sku_code}</td>
@@ -136,8 +140,8 @@ function SolverPage() {
                     <td className="px-3 py-3 text-muted-foreground">{forecast30} u</td>
                     <td className="px-3 py-3 text-warning">{r.opt.safetyStock} u</td>
                     <td className="px-3 py-3 text-destructive">{r.opt.reorderPoint} u</td>
-                    <td className="px-3 py-3 font-bold">{r.stock} u</td>
-                    <td className="px-3 py-3 text-primary">{r.on_order > 0 ? `+${r.on_order}` : "—"}</td>
+                    <td className="px-3 py-3 font-bold">{safeNum(r.stock)} u</td>
+                    <td className="px-3 py-3 text-primary">{safeNum(r.on_order) > 0 ? `+${safeNum(r.on_order)}` : "—"}</td>
                     <td className="px-3 py-3">
                       <span className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-bold", st.badge)}>
                         <Icon className="h-3 w-3" />
@@ -160,5 +164,3 @@ function SolverPage() {
     </div>
   );
 }
-
-void useSearch;
