@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart3, Package, TrendingUp, Cpu, Sliders, FileText, Settings,
-  Menu, X, LogOut, User, Building,
+  Menu, X, LogOut, User, Building, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 type MenuItem = {
-  to: "/dashboard" | "/dashboard/skus" | "/dashboard/forecasting" | "/dashboard/solver" | "/dashboard/whatif" | "/dashboard/pos" | "/dashboard/settings";
+  to: "/dashboard" | "/dashboard/skus" | "/dashboard/forecasting" | "/dashboard/solver" | "/dashboard/whatif" | "/dashboard/pos" | "/dashboard/settings" | "/dashboard/methodologie";
   label: string;
   icon: typeof BarChart3;
   exact?: boolean;
@@ -27,6 +27,7 @@ const MENU: MenuItem[] = [
   { to: "/dashboard/solver", label: "Solveur Engine", icon: Cpu },
   { to: "/dashboard/whatif", label: "Analyse What-If", icon: Sliders },
   { to: "/dashboard/pos", label: "Bons de Commande", icon: FileText },
+  { to: "/dashboard/methodologie", label: "Méthodologie & Formules", icon: BookOpen },
   { to: "/dashboard/settings", label: "Paramètres", icon: Settings },
 ];
 
