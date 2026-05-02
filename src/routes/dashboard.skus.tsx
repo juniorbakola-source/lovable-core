@@ -2,6 +2,7 @@ import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize, computeMinMax, type OptimizationResult } from "@/lib/optimizer";
+import { toSkuInput } from "@/lib/sku-helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -264,14 +265,14 @@ function SkusPage() {
 
   // Apply URL filters (drill-down from Overview / Analytics)
   const filtered = useMemo(() => {
-    const enriched = skus.map((s) => ({ ...s, opt: optimize(s), mm: computeMinMax(s) }));
+    const enriched = skus.map((s) => ({ ...s, opt: optimize(toSkuInput(s)), mm: computeMinMax(toSkuInput(s)) }));
     return enriched.filter((s) => {
       if (search.status && s.opt.status !== search.status) return false;
       if (search.category && (s.category || "Uncategorized") !== search.category) return false;
       if (search.reorder === "1" && s.opt.recommendedOrder <= 0) return false;
       if (search.q) {
         const q = search.q.toLowerCase();
-        if (!s.sku_code.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q)) return false;
+        if (!(s.sku_code ?? "").toLowerCase().includes(q) && !(s.name ?? "").toLowerCase().includes(q)) return false;
       }
       return true;
     });
