@@ -44,9 +44,9 @@ function POsPage() {
   useEffect(() => { load(); }, []);
 
   async function setStatus(po: PO, status: string) {
-    const updates: Record<string, unknown> = { status };
+    const updates: Partial<PO> = { status };
     if (status === "received") updates.received_at = new Date().toISOString();
-    const { error } = await supabase.from("purchase_orders").update(updates).eq("id", po.id);
+    const { error } = await supabase.from("purchase_orders").update(updates as any).eq("id", po.id);
     if (error) return toast.error(error.message);
 
     if (status === "received" && po.sku_id) {

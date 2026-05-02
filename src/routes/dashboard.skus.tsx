@@ -70,11 +70,11 @@ function SkusPage() {
   function openEdit(s: Sku) {
     setEditing(s);
     setForm({
-      sku_code: s.sku_code, name: s.name, category: s.category ?? "",
-      stock: s.stock, on_order: s.on_order, in_production: s.in_production ?? 0,
-      lead_time_days: s.lead_time_days, moq: s.moq,
-      unit_cost: Number(s.unit_cost), service_level: Number(s.service_level),
-      demand_history: s.demand_history.join(", "),
+      sku_code: s.sku_code ?? "", name: s.name ?? "", category: s.category ?? "",
+      stock: s.stock ?? 0, on_order: s.on_order ?? 0, in_production: s.in_production ?? 0,
+      lead_time_days: s.lead_time_days ?? 7, moq: s.moq ?? 1,
+      unit_cost: Number(s.unit_cost ?? 0), service_level: Number(s.service_level ?? 0.95),
+      demand_history: (s.demand_history ?? []).join(", "),
       demand_history_yearly: (s.demand_history_yearly ?? []).join(", "),
       forecast_3m: (s.forecast_3m ?? []).join(", "),
     });
