@@ -3,5 +3,13 @@
   "name": "tanstack-start-app",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    // Replace with your Supabase project URL in production.
+    "SUPABASE_URL": "https://your-project-id.supabase.co",
+    // Replace with your anon/publishable key in production.
+    "SUPABASE_PUBLISHABLE_KEY": "your-supabase-publishable-key",
+  },
+  // Set SUPABASE_SERVICE_ROLE_KEY as a secret:
+  // wrangler secret put SUPABASE_SERVICE_ROLE_KEY
   "main": "@tanstack/react-start/server-entry",
 }
