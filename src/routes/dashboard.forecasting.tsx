@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize } from "@/lib/optimizer";
+import { toSkuInput, safeNum } from "@/lib/sku-helpers";
 import type { Database } from "@/integrations/supabase/types";
 import {
   ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -37,7 +38,6 @@ function ForecastingPage() {
     const recent = sku.demand_history ?? [];
     const forecast = sku.forecast_3m ?? [];
 
-    // Build daily-ish series: last 20 days from `recent` then 30 days forecast
     const points: Array<{ d: string; hist?: number; fc?: number; lo?: number; hi?: number }> = [];
     const today = new Date();
     const histDays = recent.length;
@@ -49,7 +49,6 @@ function ForecastingPage() {
         hist: Number(recent[histDays - 1 - i]),
       });
     }
-    // Forecast next 30 days based on first month of forecast_3m
     const fcMonthly = forecast[0] ?? yearly[yearly.length - 1] ?? 0;
     const dailyFc = Number(fcMonthly) / 30;
     const sigma = Math.max(1, dailyFc * 0.25);
@@ -78,8 +77,9 @@ function ForecastingPage() {
 
   if (!sku) return <div className="p-8 text-muted-foreground">Chargement…</div>;
 
-  const opt = optimize(sku);
+  const opt = optimize(toSkuInput(sku));
   const forecast30 = Math.round(opt.avgDailyDemand * 30);
+  const stock = safeNum(sku.stock);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -111,7 +111,6 @@ function ForecastingPage() {
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Kpi label="Moyenne Demand Jour" value={`${opt.avgDailyDemand.toFixed(2)} u/j`} color="text-primary" />
         <Kpi label="Prévision Mois (30j)" value={`${forecast30} u`} color="text-primary-glow" />
@@ -144,9 +143,9 @@ function ForecastingPage() {
             Niveau de stock vs seuils
           </h2>
           <div className="space-y-4">
-            <Bar label="Stock Physique" value={sku.stock} max={Math.max(sku.stock, opt.reorderPoint, opt.safetyStock) * 1.2} color="bg-success" />
-            <Bar label="Stock de Sécurité" value={opt.safetyStock} max={Math.max(sku.stock, opt.reorderPoint, opt.safetyStock) * 1.2} color="bg-warning" />
-            <Bar label="Point de Commande" value={opt.reorderPoint} max={Math.max(sku.stock, opt.reorderPoint, opt.safetyStock) * 1.2} color="bg-destructive" />
+            <Bar label="Stock Physique" value={stock} max={Math.max(stock, opt.reorderPoint, opt.safetyStock) * 1.2} color="bg-success" />
+            <Bar label="Stock de Sécurité" value={opt.safetyStock} max={Math.max(stock, opt.reorderPoint, opt.safetyStock) * 1.2} color="bg-warning" />
+            <Bar label="Point de Commande" value={opt.reorderPoint} max={Math.max(stock, opt.reorderPoint, opt.safetyStock) * 1.2} color="bg-destructive" />
           </div>
           <div className="mt-5 p-3 rounded-xl border border-chart-5/40 bg-chart-5/10 text-chart-5 text-xs flex items-start gap-2">
             <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
@@ -160,7 +159,6 @@ function ForecastingPage() {
         </div>
       </div>
 
-      {/* 7-day forecast cards */}
       <div className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-sm font-bold mb-4 uppercase tracking-wider text-muted-foreground">
           Prochaines échéances (Prévisions journalières 7j)
@@ -189,7 +187,7 @@ function Kpi({ label, value, color }: { label: string; value: string; color: str
 }
 
 function Bar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = Math.min(100, (value / max) * 100);
+  const pct = Math.min(100, max > 0 ? (value / max) * 100 : 0);
   return (
     <div>
       <div className="flex justify-between text-xs mb-1.5">

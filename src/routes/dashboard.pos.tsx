@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { safeNum, safeStr } from "@/lib/sku-helpers";
 import type { Database } from "@/integrations/supabase/types";
 import { FileText, Package, CheckCircle2, Truck, XCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
@@ -42,41 +43,39 @@ function POsPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function setStatus(po: PO, status: PO["status"]) {
-    const updates: Partial<PO> = { status };
+  async function setStatus(po: PO, status: string) {
+    const updates: Record<string, unknown> = { status };
     if (status === "received") updates.received_at = new Date().toISOString();
     const { error } = await supabase.from("purchase_orders").update(updates).eq("id", po.id);
     if (error) return toast.error(error.message);
 
-    // If received, increment SKU stock and decrement on_order
-    if (status === "received") {
+    if (status === "received" && po.sku_id) {
       const sku = skuMap.get(po.sku_id);
       if (sku) {
         await supabase.from("skus").update({
-          stock: sku.stock + po.quantity,
-          on_order: Math.max(0, sku.on_order - po.quantity),
+          stock: safeNum(sku.stock) + safeNum(po.quantity),
+          on_order: Math.max(0, safeNum(sku.on_order) - safeNum(po.quantity)),
         }).eq("id", sku.id);
       }
-    } else if (status === "sent" || status === "in_transit") {
-      // Mark as on_order in SKU
+    } else if ((status === "sent" || status === "in_transit") && po.sku_id) {
       const sku = skuMap.get(po.sku_id);
       if (sku && po.status === "draft") {
-        await supabase.from("skus").update({ on_order: sku.on_order + po.quantity }).eq("id", sku.id);
+        await supabase.from("skus").update({ on_order: safeNum(sku.on_order) + safeNum(po.quantity) }).eq("id", sku.id);
       }
     }
-    toast.success(`Statut mis à jour : ${STATUS_META[status].label}`);
+    toast.success(`Statut mis à jour : ${STATUS_META[status]?.label ?? status}`);
     await load();
   }
 
   async function remove(po: PO) {
-    if (!confirm(`Supprimer le PO ${po.po_number} ?`)) return;
+    if (!confirm(`Supprimer le PO ${safeStr(po.po_number, "?")} ?`)) return;
     const { error } = await supabase.from("purchase_orders").delete().eq("id", po.id);
     if (error) return toast.error(error.message);
     toast.success("PO supprimé");
     await load();
   }
 
-  const totalValue = pos.reduce((acc, p) => acc + p.quantity * Number(p.unit_cost), 0);
+  const totalValue = pos.reduce((acc, p) => acc + safeNum(p.quantity) * safeNum(p.unit_cost), 0);
   const active = pos.filter((p) => p.status !== "received" && p.status !== "cancelled").length;
 
   return (
@@ -130,20 +129,20 @@ function POsPage() {
               </thead>
               <tbody>
                 {pos.map((p) => {
-                  const meta = STATUS_META[p.status] ?? STATUS_META.draft;
+                  const meta = STATUS_META[safeStr(p.status, "draft")] ?? STATUS_META.draft;
                   const Icon = meta.icon;
-                  const sku = skuMap.get(p.sku_id);
+                  const sku = p.sku_id ? skuMap.get(p.sku_id) : undefined;
                   return (
                     <tr key={p.id} className="border-t border-border hover:bg-secondary/30">
-                      <td className="px-3 py-3 font-mono">{p.po_number}</td>
+                      <td className="px-3 py-3 font-mono">{p.po_number ?? "—"}</td>
                       <td className="px-3 py-3">
                         <div className="font-mono font-bold">{sku?.sku_code ?? "—"}</div>
                         <div className="text-muted-foreground text-[10px]">{sku?.name}</div>
                       </td>
-                      <td className="px-3 py-3 font-bold">{p.quantity} u</td>
-                      <td className="px-3 py-3 text-muted-foreground">{Number(p.unit_cost).toFixed(2)} €</td>
+                      <td className="px-3 py-3 font-bold">{safeNum(p.quantity)} u</td>
+                      <td className="px-3 py-3 text-muted-foreground">{safeNum(p.unit_cost).toFixed(2)} €</td>
                       <td className="px-3 py-3 font-bold">
-                        {(p.quantity * Number(p.unit_cost)).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
+                        {(safeNum(p.quantity) * safeNum(p.unit_cost)).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
                       </td>
                       <td className="px-3 py-3 text-muted-foreground">
                         {p.expected_at ? new Date(p.expected_at).toLocaleDateString("fr-FR") : "—"}
@@ -156,8 +155,8 @@ function POsPage() {
                       <td className="px-3 py-3">
                         <div className="flex justify-end gap-1">
                           <select
-                            value={p.status}
-                            onChange={(e) => setStatus(p, e.target.value as PO["status"])}
+                            value={safeStr(p.status, "draft")}
+                            onChange={(e) => setStatus(p, e.target.value)}
                             className="bg-background border border-border rounded-md px-1.5 py-1 text-[10px]"
                           >
                             {Object.entries(STATUS_META).map(([k, m]) => (
