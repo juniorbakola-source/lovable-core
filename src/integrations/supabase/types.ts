@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          created_at: string | null
+          id: string
+          industry: string | null
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          industry?: string | null
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          industry?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
       contact_submissions: {
         Row: {
           created_at: string
@@ -52,6 +73,35 @@ export type Database = {
           "Purchase Order"?: number
         }
         Relationships: []
+      }
+      demand_history: {
+        Row: {
+          date: string | null
+          id: string
+          quantity: number | null
+          sku_id: string | null
+        }
+        Insert: {
+          date?: string | null
+          id?: string
+          quantity?: number | null
+          sku_id?: string | null
+        }
+        Update: {
+          date?: string | null
+          id?: string
+          quantity?: number | null
+          sku_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demand_history_sku_id_fkey"
+            columns: ["sku_id"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_send_log: {
         Row: {
@@ -140,6 +190,111 @@ export type Database = {
         }
         Relationships: []
       }
+      forecasts: {
+        Row: {
+          forecast_date: string | null
+          id: string
+          predicted_quantity: number | null
+          sku_id: string | null
+        }
+        Insert: {
+          forecast_date?: string | null
+          id?: string
+          predicted_quantity?: number | null
+          sku_id?: string | null
+        }
+        Update: {
+          forecast_date?: string | null
+          id?: string
+          predicted_quantity?: number | null
+          sku_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecasts_sku_id_fkey"
+            columns: ["sku_id"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory: {
+        Row: {
+          id: string
+          incoming: number | null
+          on_hand: number | null
+          reorder_point: number | null
+          reserved: number | null
+          safety_stock: number | null
+          sku_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          incoming?: number | null
+          on_hand?: number | null
+          reorder_point?: number | null
+          reserved?: number | null
+          safety_stock?: number | null
+          sku_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          incoming?: number | null
+          on_hand?: number | null
+          reorder_point?: number | null
+          reserved?: number | null
+          safety_stock?: number | null
+          sku_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_sku_id_fkey"
+            columns: ["sku_id"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kpis: {
+        Row: {
+          calculated_at: string | null
+          company_id: string | null
+          id: string
+          savings: number | null
+          service_level: number | null
+          stock_value: number | null
+        }
+        Insert: {
+          calculated_at?: string | null
+          company_id?: string | null
+          id?: string
+          savings?: number | null
+          service_level?: number | null
+          stock_value?: number | null
+        }
+        Update: {
+          calculated_at?: string | null
+          company_id?: string | null
+          id?: string
+          savings?: number | null
+          service_level?: number | null
+          stock_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpis_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       optimization_runs: {
         Row: {
           completed_at: string | null
@@ -176,55 +331,137 @@ export type Database = {
         }
         Relationships: []
       }
-      purchase_orders: {
+      profiles: {
         Row: {
-          created_at: string
-          expected_at: string | null
+          company_id: string | null
+          created_at: string | null
           id: string
-          notes: string | null
-          ordered_at: string | null
-          po_number: string
-          quantity: number
-          received_at: string | null
-          sku_id: string
-          status: string
-          unit_cost: number
-          updated_at: string
-          user_id: string
+          role: string | null
         }
         Insert: {
-          created_at?: string
-          expected_at?: string | null
-          id?: string
-          notes?: string | null
-          ordered_at?: string | null
-          po_number: string
-          quantity: number
-          received_at?: string | null
-          sku_id: string
-          status?: string
-          unit_cost?: number
-          updated_at?: string
-          user_id: string
+          company_id?: string | null
+          created_at?: string | null
+          id: string
+          role?: string | null
         }
         Update: {
-          created_at?: string
-          expected_at?: string | null
+          company_id?: string | null
+          created_at?: string | null
           id?: string
-          notes?: string | null
-          ordered_at?: string | null
-          po_number?: string
-          quantity?: number
-          received_at?: string | null
-          sku_id?: string
-          status?: string
-          unit_cost?: number
-          updated_at?: string
-          user_id?: string
+          role?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "purchase_orders_sku_id_fkey"
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_order_items: {
+        Row: {
+          id: string
+          po_id: string | null
+          quantity: number | null
+          sku_id: string | null
+          unit_price: number | null
+        }
+        Insert: {
+          id?: string
+          po_id?: string | null
+          quantity?: number | null
+          sku_id?: string | null
+          unit_price?: number | null
+        }
+        Update: {
+          id?: string
+          po_id?: string | null
+          quantity?: number | null
+          sku_id?: string | null
+          unit_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_items_po_id_fkey"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_items_sku_id_fkey"
+            columns: ["sku_id"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_orders: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          id: string
+          status: string | null
+          total_amount: number | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          total_amount?: number | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          total_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_orders_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recommendations: {
+        Row: {
+          created_at: string | null
+          id: string
+          reorder_point: number | null
+          reorder_qty: number | null
+          safety_stock: number | null
+          sku_id: string | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          reorder_point?: number | null
+          reorder_qty?: number | null
+          safety_stock?: number | null
+          sku_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          reorder_point?: number | null
+          reorder_qty?: number | null
+          safety_stock?: number | null
+          sku_id?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendations_sku_id_fkey"
             columns: ["sku_id"]
             isOneToOne: false
             referencedRelation: "skus"
@@ -234,81 +471,70 @@ export type Database = {
       }
       skus: {
         Row: {
-          ai_justification: string | null
-          ai_max_recommended: number | null
-          ai_min_recommended: number | null
-          ai_optimized_at: string | null
           category: string | null
-          created_at: string
-          demand_history: number[]
-          demand_history_yearly: number[]
-          forecast_3m: number[]
+          company_id: string | null
+          created_at: string | null
           id: string
-          in_production: number
-          lead_time_days: number
-          max_stock: number | null
-          min_stock: number | null
-          moq: number
-          name: string
-          on_order: number
-          service_level: number
-          sku_code: string
-          stock: number
-          unit_cost: number
-          updated_at: string
-          user_id: string
+          name: string | null
+          sku_code: string | null
+          unit_cost: number | null
         }
         Insert: {
-          ai_justification?: string | null
-          ai_max_recommended?: number | null
-          ai_min_recommended?: number | null
-          ai_optimized_at?: string | null
           category?: string | null
-          created_at?: string
-          demand_history?: number[]
-          demand_history_yearly?: number[]
-          forecast_3m?: number[]
+          company_id?: string | null
+          created_at?: string | null
           id?: string
-          in_production?: number
-          lead_time_days?: number
-          max_stock?: number | null
-          min_stock?: number | null
-          moq?: number
-          name: string
-          on_order?: number
-          service_level?: number
-          sku_code: string
-          stock?: number
-          unit_cost?: number
-          updated_at?: string
-          user_id: string
+          name?: string | null
+          sku_code?: string | null
+          unit_cost?: number | null
         }
         Update: {
-          ai_justification?: string | null
-          ai_max_recommended?: number | null
-          ai_min_recommended?: number | null
-          ai_optimized_at?: string | null
           category?: string | null
-          created_at?: string
-          demand_history?: number[]
-          demand_history_yearly?: number[]
-          forecast_3m?: number[]
+          company_id?: string | null
+          created_at?: string | null
           id?: string
-          in_production?: number
-          lead_time_days?: number
-          max_stock?: number | null
-          min_stock?: number | null
-          moq?: number
-          name?: string
-          on_order?: number
-          service_level?: number
-          sku_code?: string
-          stock?: number
-          unit_cost?: number
-          updated_at?: string
-          user_id?: string
+          name?: string | null
+          sku_code?: string | null
+          unit_cost?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "skus_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supply: {
+        Row: {
+          id: string
+          lead_time_days: number | null
+          sku_id: string | null
+          supplier_name: string | null
+        }
+        Insert: {
+          id?: string
+          lead_time_days?: number | null
+          sku_id?: string | null
+          supplier_name?: string | null
+        }
+        Update: {
+          id?: string
+          lead_time_days?: number | null
+          sku_id?: string | null
+          supplier_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supply_sku_id_fkey"
+            columns: ["sku_id"]
+            isOneToOne: false
+            referencedRelation: "skus"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       suppressed_emails: {
         Row: {
@@ -364,6 +590,7 @@ export type Database = {
           read_ct: number
         }[]
       }
+      upload_file: { Args: { file_name: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
