@@ -20,17 +20,7 @@ import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
-
-// Use inline type for silvery_engine_runs / silvery_engine_results since
-// types.ts is generated externally; casting via `as any` where needed.
-type EngineRun = {
-  id: string;
-  status: string;
-  skus_processed: number;
-  created_at: string;
-  completed_at: string | null;
-  trigger: string;
-};
+type EngineRun = Database["public"]["Tables"]["silvery_engine_runs"]["Row"];
 
 type EngineResult = {
   id: string;
@@ -90,8 +80,7 @@ function SilveryPage() {
     setLoading(true);
     const [{ data: skuData }, { data: runData }] = await Promise.all([
       supabase.from("skus").select("*").order("sku_code"),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any)
+      supabase
         .from("silvery_engine_runs")
         .select("*")
         .order("created_at", { ascending: false })
@@ -103,8 +92,7 @@ function SilveryPage() {
     // Load results from latest completed run
     const latestRun = ((runData as EngineRun[] | null) ?? []).find((r) => r.status === "completed");
     if (latestRun) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: results } = await (supabase as any)
+      const { data: results } = await supabase
         .from("silvery_engine_results")
         .select("*")
         .eq("run_id", latestRun.id)
@@ -124,14 +112,13 @@ function SilveryPage() {
     setRunning(true);
     try {
       // Create run record
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: runData, error: runErr } = await (supabase as any)
+      const { data: runData, error: runErr } = await supabase
         .from("silvery_engine_runs")
         .insert({ user_id: user.id, trigger: "manual", status: "running" })
         .select()
         .single();
       if (runErr) throw runErr;
-      const runId = (runData as { id: string }).id;
+      const runId = runData.id;
 
       // Compute results
       const results = skus.map((s) => {
@@ -151,23 +138,21 @@ function SilveryPage() {
           recommended_order: r.recommendedOrder,
           status: r.status,
           days_of_cover: r.daysOfCover,
-          input_snapshot: input as unknown as Record<string, unknown>,
+          input_snapshot: input as unknown as import("@/integrations/supabase/types").Json,
         };
       });
 
       // Batch insert results
       const CHUNK = 500;
       for (let i = 0; i < results.length; i += CHUNK) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("silvery_engine_results")
           .insert(results.slice(i, i + CHUNK));
         if (error) throw error;
       }
 
       // Mark run as completed
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await supabase
         .from("silvery_engine_runs")
         .update({
           status: "completed",
