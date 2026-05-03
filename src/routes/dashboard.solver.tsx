@@ -73,12 +73,12 @@ export function ruptureNoOrderReason(sku: Sku): string {
   if (safeNum(sku.moq) > 0 && opt.projectedInventory < opt.reorderPoint) {
     return (
       `La MOQ (${safeNum(sku.moq)} u) ou les contraintes d'arrondi ont ramené ` +
-      "la recommande à 0. Vérifiez la valeur de la MOQ dans la fiche SKU."
+      "la recommandation à 0. Vérifiez la valeur de la MOQ dans la fiche SKU."
     );
   }
 
   return (
-    "Le moteur n'a pas déclenché de recommande pour ce SKU malgré le statut Rupture. " +
+    "Le moteur n'a pas déclenché de recommandation pour ce SKU malgré le statut Rupture. " +
     "Vérifiez l'historique de demande, le délai fournisseur et les commandes en cours."
   );
 }
@@ -248,7 +248,7 @@ function SolverPage() {
                             <HelpCircle className="h-3.5 w-3.5 text-destructive/70" />
                             <span className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-72 rounded-xl border border-border bg-card p-3 text-[11px] text-foreground shadow-lg z-10 leading-relaxed font-normal">
                               <span className="font-bold text-destructive block mb-1">
-                                ⚠ Rupture sans recommande
+                                ⚠ Rupture sans recommandation
                               </span>
                               {ruptureNoOrderReason(r)}
                             </span>

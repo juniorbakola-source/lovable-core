@@ -13,8 +13,10 @@
 CREATE TABLE IF NOT EXISTS public.silvery_engine_runs (
   id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id       uuid        NOT NULL,
-  trigger       text        NOT NULL DEFAULT 'manual',  -- 'manual' | 'scheduled'
-  status        text        NOT NULL DEFAULT 'running', -- 'running' | 'completed' | 'failed'
+  trigger       text        NOT NULL DEFAULT 'manual'
+                            CHECK (trigger IN ('manual', 'scheduled')),
+  status        text        NOT NULL DEFAULT 'running'
+                            CHECK (status IN ('running', 'completed', 'failed')),
   skus_processed integer    NOT NULL DEFAULT 0,
   created_at    timestamptz NOT NULL DEFAULT now(),
   completed_at  timestamptz

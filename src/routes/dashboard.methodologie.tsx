@@ -91,7 +91,7 @@ const SECTIONS = [
       },
       {
         subtitle: "Exemple",
-        body: "SKU-001 a un stock physique de 50 unités et 30 unités on_order (en transit). Demande journalière = 5 u, Délai = 7 jours.\n  Inventaire projeté = 50 + 30 − (5 × 7) = 45 unités.\nSans le transit, l'inventaire projeté serait 50 − 35 = 15 u, ce qui déclencherait une recommande. Grâce au transit (on_order = 30), le solveur sait que le stock sera suffisant et affiche « — » dans la colonne Recommandé.",
+        body: "SKU-001 a un stock physique de 50 unités et 30 unités on_order (en transit). Demande journalière = 5 u, Délai = 7 jours.\n  Inventaire projeté = 50 + 30 − (5 × 7) = 45 unités.\nSans le transit, l'inventaire projeté serait 50 − 35 = 15 u, ce qui déclencherait une recommandation. Grâce au transit (on_order = 30), le solveur sait que le stock sera suffisant et affiche « — » dans la colonne Recommandé.",
       },
     ],
   },
@@ -110,7 +110,7 @@ const SECTIONS = [
       },
       {
         subtitle: "Cas : SKU bloqué par MOQ ou contrainte de budget",
-        body: "Si la MOQ (quantité minimale de commande) est très grande par rapport aux besoins calculés, le solveur arrondit la recommande à 0 plutôt que de suggérer une quantité fractionnaire. Vérifiez la valeur du champ moq dans la fiche SKU.",
+        body: "Si la MOQ (quantité minimale de commande) est très grande par rapport aux besoins calculés, le solveur arrondit la recommandation à 0 plutôt que de suggérer une quantité fractionnaire. Vérifiez la valeur du champ moq dans la fiche SKU.",
       },
       {
         subtitle: "Cas : horizon déjà couvert par l'inventaire projeté",
