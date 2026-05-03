@@ -228,7 +228,7 @@ export async function upsertSkus(
     rows_inserted: inserted,
     rows_updated: updated,
     rows_failed: errors.length,
-    errors: errors.length ? (errors as unknown as Record<string, unknown>[]) : null,
+    errors: errors.length ? (errors as unknown as import("@/integrations/supabase/types").Json) : null,
     status: errors.length === rawSkus.length ? "failed" : errors.length > 0 ? "partial" : "success",
   });
 

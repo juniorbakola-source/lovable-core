@@ -1,5 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BookOpen, FlaskConical, FunctionSquare, Lightbulb, ListChecks } from "lucide-react";
+import {
+  BookOpen,
+  FlaskConical,
+  FunctionSquare,
+  Lightbulb,
+  ListChecks,
+  Database,
+} from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/methodologie")({
   head: () => ({ meta: [{ title: "Méthodologie & Formules — FlowStockAI" }] }),
@@ -58,6 +65,56 @@ const SECTIONS = [
       {
         subtitle: "Coût total de possession (Total Cost)",
         body: "Coût total = (Demande annuelle / Q) × Coût par commande + (Q / 2) × Coût de possession unitaire  —  où Q est la quantité commandée.",
+      },
+    ],
+  },
+  {
+    id: "transit",
+    icon: Database,
+    title: "Origine des données — colonne Transit",
+    content: [
+      {
+        subtitle: "Définition de la colonne Transit",
+        body: "La colonne « Transit » dans le Solveur Engine affiche la valeur du champ on_order de chaque SKU. Cette valeur représente les quantités déjà commandées auprès des fournisseurs mais pas encore réceptionnées en stock physique — c'est-à-dire le pipeline d'approvisionnement en cours.",
+      },
+      {
+        subtitle: "Source de la donnée",
+        body: "La valeur on_order est lue directement depuis la table `public.skus` (colonne on_order, type numeric). Elle peut être renseignée de trois façons :\n  1. Manuellement lors de la création/modification d'un SKU.\n  2. Automatiquement incrémentée (+quantité) quand un Bon de Commande passe au statut « Envoyée » ou « En transit ».\n  3. Automatiquement décrémentée (−quantité) quand un Bon de Commande passe au statut « Reçue » (et le stock physique est augmenté en conséquence).",
+      },
+      {
+        subtitle: "Utilisation dans le solveur",
+        body: "Le solveur intègre on_order dans le calcul de l'inventaire projeté :\n  Inventaire projeté = Stock physique + on_order − (Demande moyenne × Délai fournisseur)\nCela évite de recommander des commandes superflues quand des approvisionnements sont déjà en route.",
+      },
+      {
+        subtitle: "Fréquence de mise à jour",
+        body: "La valeur est mise à jour en temps réel à chaque changement de statut d'un Bon de Commande. Elle est également recalculée à chaque lancement du Silvery Engine ou du Solveur Engine (les calculs utilisent toujours la valeur courante de on_order au moment du run).",
+      },
+      {
+        subtitle: "Exemple",
+        body: "SKU-001 a un stock physique de 50 unités et 30 unités on_order (en transit). Demande journalière = 5 u, Délai = 7 jours.\n  Inventaire projeté = 50 + 30 − (5 × 7) = 45 unités.\nSans le transit, l'inventaire projeté serait 50 − 35 = 15 u, ce qui déclencherait une recommandation. Grâce au transit (on_order = 30), le solveur sait que le stock sera suffisant et affiche « — » dans la colonne Recommandé.",
+      },
+    ],
+  },
+  {
+    id: "rupture",
+    icon: FlaskConical,
+    title: "Statut Rupture — Pourquoi sans quantité recommandée ?",
+    content: [
+      {
+        subtitle: "Cas courant : commandes déjà en route (on_order élevé)",
+        body: "Un SKU peut être en statut « Rupture » (stock physique ≤ stock de sécurité) tout en affichant « — » pour la quantité recommandée. Cela se produit quand l'inventaire projeté (stock + on_order − demande pendant le délai) est déjà supérieur au point de commande. Des approvisionnements suffisants sont déjà en transit : recommander une commande supplémentaire serait un doublon.",
+      },
+      {
+        subtitle: "Cas : demande historique nulle ou absente",
+        body: "Si l'historique de demande (demand_history) est vide ou ne contient que des zéros, le solveur calcule avg_daily_demand = 0. Le stock de sécurité, le ROP et la quantité recommandée sont alors tous nuls. Même un stock physique de 0 vérifie la condition « stock ≤ safetyStock » (0 ≤ 0 = Rupture), mais aucune commande n'est déclenchée car la demande projetée est nulle. Solution : renseigner l'historique de ventes dans la fiche SKU.",
+      },
+      {
+        subtitle: "Cas : SKU bloqué par MOQ ou contrainte de budget",
+        body: "Si la MOQ (quantité minimale de commande) est très grande par rapport aux besoins calculés, le solveur arrondit la recommandation à 0 plutôt que de suggérer une quantité fractionnaire. Vérifiez la valeur du champ moq dans la fiche SKU.",
+      },
+      {
+        subtitle: "Cas : horizon déjà couvert par l'inventaire projeté",
+        body: "Le solveur calcule un objectif de couverture sur 30 jours (targetCover = demande_journalière × 30). Si l'inventaire projeté couvre déjà cet horizon ET est supérieur au ROP, recommendedOrder = 0 — même si le stock physique est bas. Le stock en transit est considéré comme suffisant pour éviter la rupture réelle.",
       },
     ],
   },
@@ -135,7 +192,11 @@ function MethodologiePage() {
       {SECTIONS.map((section) => {
         const Icon = section.icon;
         return (
-          <section key={section.id} id={section.id} className="rounded-2xl border border-border bg-card p-6 scroll-mt-6">
+          <section
+            key={section.id}
+            id={section.id}
+            className="rounded-2xl border border-border bg-card p-6 scroll-mt-6"
+          >
             <h2 className="text-base font-bold flex items-center gap-2 mb-5 pb-3 border-b border-border">
               <Icon className="h-5 w-5 text-primary" />
               {section.title}
@@ -146,7 +207,9 @@ function MethodologiePage() {
                 <div key={idx} className="grid sm:grid-cols-[200px_1fr] gap-2 sm:gap-6">
                   <div className="flex items-start gap-2 pt-0.5">
                     <Lightbulb className="h-3.5 w-3.5 text-primary/70 mt-0.5 flex-shrink-0" />
-                    <span className="text-xs font-bold text-foreground leading-tight">{item.subtitle}</span>
+                    <span className="text-xs font-bold text-foreground leading-tight">
+                      {item.subtitle}
+                    </span>
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed font-mono whitespace-pre-wrap">
                     {item.body}
@@ -160,7 +223,8 @@ function MethodologiePage() {
 
       {/* Footer note */}
       <div className="text-[10px] text-muted-foreground font-mono text-center pb-4">
-        FlowStockAI v1.0.0 — Modèles mis à jour en 2026. Pour toute question méthodologique, contactez votre administrateur.
+        FlowStockAI v1.0.0 — Modèles mis à jour en 2026. Pour toute question méthodologique,
+        contactez votre administrateur.
       </div>
     </div>
   );
