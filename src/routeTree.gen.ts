@@ -17,10 +17,12 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardWhatifRouteImport } from './routes/dashboard.whatif'
 import { Route as DashboardSolverRouteImport } from './routes/dashboard.solver'
 import { Route as DashboardSkusRouteImport } from './routes/dashboard.skus'
+import { Route as DashboardSilveryRouteImport } from './routes/dashboard.silvery'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardPosRouteImport } from './routes/dashboard.pos'
-import { Route as DashboardForecastingRouteImport } from './routes/dashboard.forecasting'
 import { Route as DashboardMethodologieRouteImport } from './routes/dashboard.methodologie'
+import { Route as DashboardForecastingRouteImport } from './routes/dashboard.forecasting'
+import { Route as DashboardConnectorsRouteImport } from './routes/dashboard.connectors'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -62,6 +64,11 @@ const DashboardSkusRoute = DashboardSkusRouteImport.update({
   path: '/skus',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardSilveryRoute = DashboardSilveryRouteImport.update({
+  id: '/silvery',
+  path: '/silvery',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -72,14 +79,19 @@ const DashboardPosRoute = DashboardPosRouteImport.update({
   path: '/pos',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardMethodologieRoute = DashboardMethodologieRouteImport.update({
+  id: '/methodologie',
+  path: '/methodologie',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardForecastingRoute = DashboardForecastingRouteImport.update({
   id: '/forecasting',
   path: '/forecasting',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardMethodologieRoute = DashboardMethodologieRouteImport.update({
-  id: '/methodologie',
-  path: '/methodologie',
+const DashboardConnectorsRoute = DashboardConnectorsRouteImport.update({
+  id: '/connectors',
+  path: '/connectors',
   getParentRoute: () => DashboardRoute,
 } as any)
 
@@ -88,10 +100,12 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
   '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/silvery': typeof DashboardSilveryRoute
   '/dashboard/skus': typeof DashboardSkusRoute
   '/dashboard/solver': typeof DashboardSolverRoute
   '/dashboard/whatif': typeof DashboardWhatifRoute
@@ -101,10 +115,12 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
   '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/silvery': typeof DashboardSilveryRoute
   '/dashboard/skus': typeof DashboardSkusRoute
   '/dashboard/solver': typeof DashboardSolverRoute
   '/dashboard/whatif': typeof DashboardWhatifRoute
@@ -116,10 +132,12 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
   '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/silvery': typeof DashboardSilveryRoute
   '/dashboard/skus': typeof DashboardSkusRoute
   '/dashboard/solver': typeof DashboardSolverRoute
   '/dashboard/whatif': typeof DashboardWhatifRoute
@@ -132,10 +150,12 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/signup'
+    | '/dashboard/connectors'
     | '/dashboard/forecasting'
     | '/dashboard/methodologie'
     | '/dashboard/pos'
     | '/dashboard/settings'
+    | '/dashboard/silvery'
     | '/dashboard/skus'
     | '/dashboard/solver'
     | '/dashboard/whatif'
@@ -145,10 +165,12 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/dashboard/connectors'
     | '/dashboard/forecasting'
     | '/dashboard/methodologie'
     | '/dashboard/pos'
     | '/dashboard/settings'
+    | '/dashboard/silvery'
     | '/dashboard/skus'
     | '/dashboard/solver'
     | '/dashboard/whatif'
@@ -159,10 +181,12 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/signup'
+    | '/dashboard/connectors'
     | '/dashboard/forecasting'
     | '/dashboard/methodologie'
     | '/dashboard/pos'
     | '/dashboard/settings'
+    | '/dashboard/silvery'
     | '/dashboard/skus'
     | '/dashboard/solver'
     | '/dashboard/whatif'
@@ -234,6 +258,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSkusRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/silvery': {
+      id: '/dashboard/silvery'
+      path: '/silvery'
+      fullPath: '/dashboard/silvery'
+      preLoaderRoute: typeof DashboardSilveryRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/settings': {
       id: '/dashboard/settings'
       path: '/settings'
@@ -248,13 +279,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardPosRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/forecasting': {
-      id: '/dashboard/forecasting'
-      path: '/forecasting'
-      fullPath: '/dashboard/forecasting'
-      preLoaderRoute: typeof DashboardForecastingRouteImport
-      parentRoute: typeof DashboardRoute
-    }
     '/dashboard/methodologie': {
       id: '/dashboard/methodologie'
       path: '/methodologie'
@@ -262,14 +286,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardMethodologieRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/forecasting': {
+      id: '/dashboard/forecasting'
+      path: '/forecasting'
+      fullPath: '/dashboard/forecasting'
+      preLoaderRoute: typeof DashboardForecastingRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/connectors': {
+      id: '/dashboard/connectors'
+      path: '/connectors'
+      fullPath: '/dashboard/connectors'
+      preLoaderRoute: typeof DashboardConnectorsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
   }
 }
 
 interface DashboardRouteChildren {
+  DashboardConnectorsRoute: typeof DashboardConnectorsRoute
   DashboardForecastingRoute: typeof DashboardForecastingRoute
   DashboardMethodologieRoute: typeof DashboardMethodologieRoute
   DashboardPosRoute: typeof DashboardPosRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardSilveryRoute: typeof DashboardSilveryRoute
   DashboardSkusRoute: typeof DashboardSkusRoute
   DashboardSolverRoute: typeof DashboardSolverRoute
   DashboardWhatifRoute: typeof DashboardWhatifRoute
@@ -277,10 +317,12 @@ interface DashboardRouteChildren {
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardConnectorsRoute: DashboardConnectorsRoute,
   DashboardForecastingRoute: DashboardForecastingRoute,
   DashboardMethodologieRoute: DashboardMethodologieRoute,
   DashboardPosRoute: DashboardPosRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardSilveryRoute: DashboardSilveryRoute,
   DashboardSkusRoute: DashboardSkusRoute,
   DashboardSolverRoute: DashboardSolverRoute,
   DashboardWhatifRoute: DashboardWhatifRoute,

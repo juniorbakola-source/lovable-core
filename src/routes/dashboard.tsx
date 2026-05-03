@@ -3,8 +3,21 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  BarChart3, Package, TrendingUp, Cpu, Sliders, FileText, Settings,
-  Menu, X, LogOut, User, Building, BookOpen,
+  BarChart3,
+  Package,
+  TrendingUp,
+  Cpu,
+  Sliders,
+  FileText,
+  Settings,
+  Menu,
+  X,
+  LogOut,
+  User,
+  Building,
+  BookOpen,
+  Zap,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -14,7 +27,17 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 type MenuItem = {
-  to: "/dashboard" | "/dashboard/skus" | "/dashboard/forecasting" | "/dashboard/solver" | "/dashboard/whatif" | "/dashboard/pos" | "/dashboard/settings" | "/dashboard/methodologie";
+  to:
+    | "/dashboard"
+    | "/dashboard/skus"
+    | "/dashboard/silvery"
+    | "/dashboard/connectors"
+    | "/dashboard/forecasting"
+    | "/dashboard/solver"
+    | "/dashboard/whatif"
+    | "/dashboard/pos"
+    | "/dashboard/settings"
+    | "/dashboard/methodologie";
   label: string;
   icon: typeof BarChart3;
   exact?: boolean;
@@ -23,6 +46,8 @@ type MenuItem = {
 const MENU: MenuItem[] = [
   { to: "/dashboard", label: "Vue Globale", icon: BarChart3, exact: true },
   { to: "/dashboard/skus", label: "Gestion SKUs", icon: Package },
+  { to: "/dashboard/silvery", label: "Silvery Engine", icon: Zap },
+  { to: "/dashboard/connectors", label: "Connecteurs", icon: Plug },
   { to: "/dashboard/forecasting", label: "Séries Temporelles IA", icon: TrendingUp },
   { to: "/dashboard/solver", label: "Solveur Engine", icon: Cpu },
   { to: "/dashboard/whatif", label: "Analyse What-If", icon: Sliders },
@@ -56,9 +81,9 @@ function DashboardLayout() {
     navigate({ to: "/" });
   }
 
-  const activeLabel = MENU.find((m) =>
-    m.exact ? location.pathname === m.to : location.pathname.startsWith(m.to),
-  )?.label ?? "Dashboard";
+  const activeLabel =
+    MENU.find((m) => (m.exact ? location.pathname === m.to : location.pathname.startsWith(m.to)))
+      ?.label ?? "Dashboard";
 
   const orgName = (user.user_metadata?.company as string | undefined) ?? "Mon Organisation";
   const initials = (user.email ?? "?").slice(0, 2).toUpperCase();
@@ -92,7 +117,9 @@ function DashboardLayout() {
 
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {MENU.map((item) => {
-            const active = item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to);
+            const active = item.exact
+              ? location.pathname === item.to
+              : location.pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
               <Link
@@ -105,7 +132,9 @@ function DashboardLayout() {
                     : "bg-transparent border-transparent text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40",
                 )}
               >
-                <Icon className={cn("h-4 w-4", active ? "text-primary" : "text-sidebar-foreground/50")} />
+                <Icon
+                  className={cn("h-4 w-4", active ? "text-primary" : "text-sidebar-foreground/50")}
+                />
                 {item.label}
               </Link>
             );
@@ -152,7 +181,9 @@ function DashboardLayout() {
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1">
               {MENU.map((item) => {
-                const active = item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to);
+                const active = item.exact
+                  ? location.pathname === item.to
+                  : location.pathname.startsWith(item.to);
                 const Icon = item.icon;
                 return (
                   <Link

@@ -1,8 +1,9 @@
-import { createFileRoute, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { optimize, computeMinMax, type OptimizationResult } from "@/lib/optimizer";
 import { toSkuInput } from "@/lib/sku-helpers";
+import { upsertSkus } from "@/lib/sku-ssot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +15,17 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Upload, FileSpreadsheet, Sparkles, X } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Pencil,
+  Upload,
+  FileSpreadsheet,
+  Sparkles,
+  X,
+  Plug,
+  History,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
@@ -117,6 +128,18 @@ function parseDelimitedText(text: string) {
   return rows;
 }
 
+type ImportLog = {
+  id: string;
+  source_type: string;
+  file_name: string | null;
+  rows_submitted: number;
+  rows_inserted: number;
+  rows_updated: number;
+  rows_failed: number;
+  status: string;
+  created_at: string;
+};
+
 function SkusPage() {
   const search = useSearch({ from: "/dashboard/skus" });
   const [skus, setSkus] = useState<Sku[]>([]);
@@ -125,15 +148,23 @@ function SkusPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Sku | null>(null);
   const [form, setForm] = useState(empty);
+  const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("skus")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [{ data, error }, { data: logData }] = await Promise.all([
+      supabase.from("skus").select("*").order("created_at", { ascending: false }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any)
+        .from("sku_import_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
     if (error) toast.error(error.message);
     setSkus((data as Sku[] | null) ?? []);
+    setImportLogs((logData as ImportLog[] | null) ?? []);
     setLoading(false);
   }
 
@@ -225,7 +256,6 @@ function SkusPage() {
         const row: Record<string, string> = {};
         headers.forEach((h, i) => (row[h] = cells[i] ?? ""));
         return {
-          user_id: user.id,
           sku_code: row.sku_code,
           name: row.name,
           category: row.category || null,
@@ -244,10 +274,14 @@ function SkusPage() {
       })
       .filter((r) => r.sku_code && r.name);
     if (!rows.length) return toast.error("No valid rows");
-    const { error } = await supabase.from("skus").insert(rows);
-    if (error) toast.error(error.message);
-    else {
-      toast.success(`Imported ${rows.length} SKUs`);
+    const result = await upsertSkus(user.id, rows, "csv", { fileName: file.name });
+    if (result.failed === rows.length) {
+      toast.error(`Import failed: ${result.errors[0]?.message}`);
+    } else {
+      toast.success(
+        `Imported ${result.inserted} new, updated ${result.updated} SKUs` +
+          (result.failed > 0 ? ` (${result.failed} errors)` : ""),
+      );
       load();
     }
   }
@@ -314,7 +348,6 @@ function SkusPage() {
               : Array(3).fill(0);
 
           return {
-            user_id: user.id,
             sku_code: item,
             name: item,
             category: r[11] != null ? String(r[11]).trim() : null,
@@ -332,18 +365,10 @@ function SkusPage() {
         })
         .filter((r): r is NonNullable<typeof r> => r !== null);
       if (!rows.length) return toast.error("No valid rows in ELKA file");
-      const chunkSize = 500;
-      let inserted = 0;
-      for (let i = 0; i < rows.length; i += chunkSize) {
-        const chunk = rows.slice(i, i + chunkSize);
-        const { error } = await supabase.from("skus").insert(chunk);
-        if (error) {
-          toast.error(`Chunk ${i}: ${error.message}`);
-          break;
-        }
-        inserted += chunk.length;
-      }
-      toast.success(`Imported ${inserted} SKUs from ELKA file`);
+      const result = await upsertSkus(user.id, rows, "elka", { fileName: file.name });
+      toast.success(
+        `ELKA: ${result.inserted} insérés, ${result.updated} mis à jour, ${result.failed} erreurs`,
+      );
       load();
     } catch (e) {
       toast.error(`Failed to parse ELKA file: ${(e as Error).message}`);
@@ -477,6 +502,14 @@ function SkusPage() {
               </span>
             </Button>
           </label>
+          <Button asChild variant="outline">
+            <Link to="/dashboard/connectors">
+              <Plug className="h-4 w-4" /> Connecteurs
+            </Link>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowLogs(!showLogs)}>
+            <History className="h-4 w-4" /> Logs
+          </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button variant="default" onClick={openNew}>
@@ -604,6 +637,66 @@ function SkusPage() {
             </a>
           </Button>
           <span className="text-sm text-muted-foreground ml-auto">{filtered.length} matching</span>
+        </div>
+      )}
+
+      {/* Import log panel */}
+      {showLogs && (
+        <div className="mb-4 rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-sm font-bold mb-3 flex items-center gap-2">
+            <History className="h-4 w-4 text-primary" /> Historique des imports
+          </h2>
+          {importLogs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Aucun import enregistré.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-muted-foreground uppercase tracking-wider">
+                  <tr>
+                    <th className="text-left p-2">Date</th>
+                    <th className="text-left p-2">Source</th>
+                    <th className="text-left p-2">Fichier</th>
+                    <th className="text-right p-2">Soumis</th>
+                    <th className="text-right p-2">Insérés</th>
+                    <th className="text-right p-2">MàJ</th>
+                    <th className="text-right p-2">Erreurs</th>
+                    <th className="text-center p-2">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importLogs.map((log) => (
+                    <tr key={log.id} className="border-t border-border">
+                      <td className="p-2 font-mono">
+                        {new Date(log.created_at).toLocaleString("fr-FR")}
+                      </td>
+                      <td className="p-2">{log.source_type}</td>
+                      <td className="p-2 text-muted-foreground truncate max-w-[120px]">
+                        {log.file_name ?? "—"}
+                      </td>
+                      <td className="p-2 text-right">{log.rows_submitted}</td>
+                      <td className="p-2 text-right text-success">{log.rows_inserted}</td>
+                      <td className="p-2 text-right text-primary">{log.rows_updated}</td>
+                      <td className="p-2 text-right text-destructive">{log.rows_failed}</td>
+                      <td className="p-2 text-center">
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                            log.status === "success"
+                              ? "bg-success/15 text-success border-success/30"
+                              : log.status === "partial"
+                                ? "bg-warning/15 text-warning border-warning/30"
+                                : "bg-destructive/15 text-destructive border-destructive/30",
+                          )}
+                        >
+                          {log.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
