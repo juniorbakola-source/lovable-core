@@ -58,7 +58,7 @@ const empty = {
   on_order: 0,
   in_production: 0,
   lead_time_days: 7,
-  moq: 1,
+  moq: 0,
   unit_cost: 0,
   service_level: 0.95,
   demand_history: "10, 12, 8, 15, 11, 9, 13, 14, 10, 12",
@@ -188,7 +188,7 @@ function SkusPage() {
       on_order: s.on_order ?? 0,
       in_production: s.in_production ?? 0,
       lead_time_days: s.lead_time_days ?? 7,
-      moq: s.moq ?? 1,
+      moq: s.moq ?? 0,
       unit_cost: Number(s.unit_cost ?? 0),
       service_level: Number(s.service_level ?? 0.95),
       demand_history: (s.demand_history ?? []).join(", "),
@@ -574,6 +574,7 @@ function SkusPage() {
                   type="number"
                   value={form.moq}
                   onChange={(v) => setForm({ ...form, moq: Number(v) })}
+                  hint="0 = pas de MOQ"
                 />
                 <Field
                   label="Service level (0–1)"
@@ -790,6 +791,7 @@ function Field({
   type = "text",
   required,
   step,
+  hint,
 }: {
   label: string;
   value: string | number;
@@ -797,6 +799,7 @@ function Field({
   type?: string;
   required?: boolean;
   step?: string;
+  hint?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -811,6 +814,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
