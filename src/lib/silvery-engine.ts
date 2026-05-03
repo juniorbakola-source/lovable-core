@@ -103,7 +103,8 @@ export function runSilveryEngine(
   const unitCost = safeNum(s.unit_cost, 0);
   const holdingCostPerUnit = unitCost > 0 ? holdingRate * unitCost : holdingRate;
   // moq=0 means "no MOQ constraint"; use 1 as the rounding unit in that case
-  const moqConstraint = safeNum(s.moq, 0) > 0 ? safeNum(s.moq, 0) : 1;
+  const rawMoq = safeNum(s.moq, 0);
+  const moqConstraint = rawMoq > 0 ? rawMoq : 1;
   let eoqRaw = 0;
   if (annualDemand > 0 && holdingCostPerUnit > 0) {
     eoqRaw = Math.sqrt((2 * annualDemand * orderingCost) / holdingCostPerUnit);
