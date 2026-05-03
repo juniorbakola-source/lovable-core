@@ -102,18 +102,19 @@ export function runSilveryEngine(
   const annualDemand = blended * 365;
   const unitCost = safeNum(s.unit_cost, 0);
   const holdingCostPerUnit = unitCost > 0 ? holdingRate * unitCost : holdingRate;
-  const moq = Math.max(1, safeNum(s.moq, 1));
+  // moq=0 means "no MOQ constraint"; use 1 as the rounding unit in that case
+  const moqConstraint = safeNum(s.moq, 0) > 0 ? safeNum(s.moq, 0) : 1;
   let eoqRaw = 0;
   if (annualDemand > 0 && holdingCostPerUnit > 0) {
     eoqRaw = Math.sqrt((2 * annualDemand * orderingCost) / holdingCostPerUnit);
   }
   // Round up to nearest MOQ
-  const eoq = moq * Math.max(1, Math.ceil(eoqRaw / moq));
+  const eoq = moqConstraint * Math.max(1, Math.ceil(eoqRaw / moqConstraint));
 
   // ── 5. Min / Max (optimised) ──────────────────────────────────────────────
   const minOptimized = Math.max(0, reorderPoint);
-  const rawMax = minOptimized + Math.max(eoq, moq);
-  const maxOptimized = Math.ceil(rawMax / moq) * moq;
+  const rawMax = minOptimized + Math.max(eoq, moqConstraint);
+  const maxOptimized = Math.ceil(rawMax / moqConstraint) * moqConstraint;
 
   // ── 6. Projected inventory & recommended order ───────────────────────────
   const pipeline = safeNum(s.on_order, 0) + safeNum(s.in_production, 0);
@@ -121,7 +122,7 @@ export function runSilveryEngine(
   let recommendedOrder = 0;
   if (projected < reorderPoint) {
     const target = maxOptimized;
-    recommendedOrder = moq * Math.ceil(Math.max(target - projected, moq) / moq);
+    recommendedOrder = moqConstraint * Math.ceil(Math.max(target - projected, moqConstraint) / moqConstraint);
   }
 
   // ── 7. Status ─────────────────────────────────────────────────────────────

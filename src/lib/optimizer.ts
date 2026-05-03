@@ -63,9 +63,10 @@ export function computeMinMax(s: SkuInput): { min: number; max: number; pipeline
   const min = Math.max(0, safety + leadDemand);
   // Max covers next 60-day horizon on top of Min, rounded up to MOQ.
   const horizonCover = Math.ceil(blendedDaily * 60);
-  const moq = Math.max(1, s.moq);
-  const rawMax = min + Math.max(horizonCover, moq);
-  const max = Math.ceil(rawMax / moq) * moq;
+  // moq=0 means "no MOQ constraint"; use 1 as the rounding unit in that case
+  const moqConstraint = s.moq > 0 ? s.moq : 1;
+  const rawMax = min + Math.max(horizonCover, moqConstraint);
+  const max = Math.ceil(rawMax / moqConstraint) * moqConstraint;
 
   return { min, max, pipeline };
 }

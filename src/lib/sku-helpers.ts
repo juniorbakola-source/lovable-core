@@ -10,7 +10,7 @@ export function toSkuInput(s: SkuRow): SkuInput {
     on_order: s.on_order ?? 0,
     in_production: s.in_production ?? 0,
     lead_time_days: s.lead_time_days ?? 7,
-    moq: s.moq ?? 1,
+    moq: s.moq ?? 0,
     unit_cost: s.unit_cost ?? 0,
     service_level: s.service_level ?? 0.95,
     demand_history: s.demand_history ?? [],
