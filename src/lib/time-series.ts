@@ -25,6 +25,26 @@ import { zScore } from "@/lib/optimizer";
 
 type SkuRow = Database["public"]["Tables"]["skus"]["Row"];
 
+// ── Engine constants ──────────────────────────────────────────────────────────
+
+/** Minimum clamped value for service_level (exclusive lower bound) */
+const MIN_SERVICE_LEVEL = 0.001;
+/** Maximum clamped value for service_level (exclusive upper bound) */
+const MAX_SERVICE_LEVEL = 0.999;
+
+/** Holt-Winters level smoothing factor (α): higher = more reactive to recent demand */
+const HW_ALPHA = 0.3;
+/** Holt-Winters trend smoothing factor (β): higher = trend changes faster */
+const HW_BETA = 0.1;
+
+/** Minimum sigma as fraction of blended daily demand (floor for low-volatility SKUs) */
+const SIGMA_MIN_FRACTION = 0.15;
+/** Absolute minimum sigma value (prevents CI collapsing to a point) */
+const SIGMA_FLOOR = 0.5;
+
+/** Horizon (days) at which the HW forecast is fully replaced by the long-run blended average */
+const BLENDING_HORIZON_DAYS = 10;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -182,7 +202,10 @@ export function extractSkuFeatures(row: SkuRow): SkuFeatures {
   // moq=0 is valid and means "unconstrained"; keep as-is (do not clamp to 1)
   const moq = Math.max(0, Math.round(Number(row.moq ?? 0)));
   const unitCost = Math.max(0, Number(row.unit_cost ?? 0));
-  const serviceLevel = Math.min(0.999, Math.max(0.001, Number(row.service_level ?? 0.95)));
+  const serviceLevel = Math.min(
+    MAX_SERVICE_LEVEL,
+    Math.max(MIN_SERVICE_LEVEL, Number(row.service_level ?? 0.95)),
+  );
 
   const partial = {
     stock,
@@ -231,7 +254,7 @@ interface HoltWintersState {
  * @param alpha  - level smoothing factor (0 < α < 1); higher = more reactive
  * @param beta   - trend smoothing factor (0 < β < 1); higher = trend changes faster
  */
-function holtWinters(series: number[], alpha = 0.3, beta = 0.1): HoltWintersState {
+function holtWinters(series: number[], alpha = HW_ALPHA, beta = HW_BETA): HoltWintersState {
   if (series.length === 0) {
     return { fitted: [], level: 0, trend: 0, residualSigma: 0 };
   }
@@ -321,7 +344,7 @@ export function buildForecastSeries(f: SkuFeatures): ForecastPoint[] {
 
   // ── Holt-Winters fit ───────────────────────────────────────────────────────
   const hw = holtWinters(hist.length > 0 ? hist : [0]);
-  const sigma = Math.max(hw.residualSigma, blendedDaily * 0.15, 0.5);
+  const sigma = Math.max(hw.residualSigma, blendedDaily * SIGMA_MIN_FRACTION, SIGMA_FLOOR);
 
   // ── Forecast horizon ───────────────────────────────────────────────────────
   for (let h = 1; h <= 30; h++) {
@@ -330,7 +353,7 @@ export function buildForecastSeries(f: SkuFeatures): ForecastPoint[] {
 
     // Blend HW toward long-run average over the horizon
     const hwFc = Math.max(0, hw.level + h * hw.trend);
-    const weight = Math.min(1, h / 10); // fully blended at h=10
+    const weight = Math.min(1, h / BLENDING_HORIZON_DAYS); // fully blended at BLENDING_HORIZON_DAYS
     const rawFc = hwFc * (1 - weight) + blendedDaily * weight;
     const fc = Math.max(0, Math.round(rawFc));
 

@@ -394,7 +394,7 @@ function ForecastingPage() {
                 <div className="text-[10px] text-muted-foreground font-mono">{p.d}</div>
                 <div className="text-base font-bold text-primary mt-1">{p.fc} u</div>
                 <div className="text-[9px] text-muted-foreground font-mono">
-                  ±{(p.hi ?? p.fc ?? 0) - (p.fc ?? 0)}
+                  ±{(p.hi ?? 0) - (p.fc ?? 0)}
                 </div>
               </div>
             ))}
