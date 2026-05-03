@@ -135,6 +135,35 @@ File: `src/lib/silvery-engine.ts`
 
 ---
 
+## Séries Temporelles IA
+
+File: `src/lib/time-series.ts` | Route: `src/routes/dashboard.forecasting.tsx`
+Full documentation: [`docs/FORECASTING.md`](./FORECASTING.md)
+
+The forecasting module reads exclusively from the `skus` SSOT table via
+`extractSkuFeatures()`, which maps all relevant columns to a typed `SkuFeatures`
+object with safe defaults.
+
+### Key outputs
+
+| Output               | Description                                                         |
+| -------------------- | ------------------------------------------------------------------- |
+| `buildForecastSeries`| Historical daily + 30-day Holt-Winters forecast with 90 % CI       |
+| `computeForecastMetrics` | Safety stock, ROP, MOQ-constrained order, days-of-cover, status |
+
+### Numeric safety
+
+- `safeDivide(n, d)` — zero-division safe; returns `fallback` (default 0).
+- `roundToMoq(qty, moq)` — rounds up to nearest MOQ; `moq=0` = unconstrained.
+- All nullable DB fields are clamped before arithmetic (no `NaN`, no `Infinity`).
+
+### MOQ convention
+
+`moq = 0` means **no order-quantity constraint** — consistent with
+`src/lib/optimizer.ts` and `src/lib/silvery-engine.ts`.
+
+---
+
 ## Connectors — Adding a New Connector
 
 1. Create `src/lib/connectors/my-connector.ts`
