@@ -87,9 +87,11 @@ function SilveryPage() {
 
   async function loadData() {
     setLoading(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
     const [{ data: skuData }, { data: runData }] = await Promise.all([
       supabase.from("skus").select("*").order("sku_code"),
-      supabase
+      sb
         .from("silvery_engine_runs")
         .select("*")
         .order("created_at", { ascending: false })
@@ -99,9 +101,9 @@ function SilveryPage() {
     setRuns((runData as EngineRun[] | null) ?? []);
 
     // Load results from latest completed run
-    const latestRun = ((runData as EngineRun[] | null) ?? []).find((r) => r.status === "completed");
+    const latestRun = ((runData as EngineRun[] | null) ?? []).find((r: EngineRun) => r.status === "completed");
     if (latestRun) {
-      const { data: results } = await supabase
+      const { data: results } = await sb
         .from("silvery_engine_results")
         .select("*")
         .eq("run_id", latestRun.id)
