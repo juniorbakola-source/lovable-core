@@ -127,9 +127,9 @@ function Overview() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Tableau de bord</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">{t("overview.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Vue globale des stocks et opérations — flux temps réel.
+            {t("overview.subtitle")}
           </p>
         </div>
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary text-xs font-mono font-bold">
@@ -140,8 +140,8 @@ function Overview() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <KpiCard
-          label="Valeur totale du stock"
-          value={`${inventoryValue.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`}
+          label={t("overview.total_value")}
+          value={fc(inventoryValue)}
           sub="Valorisation au coût d'achat"
           icon={DollarSign}
           tone="default"
@@ -201,13 +201,13 @@ function Overview() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Coût total de possession / mois :</span>
               <span className="font-mono font-bold text-warning">
-                {monthlyHolding.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
+                {fc(monthlyHolding)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Coût de rupture estimé / mois :</span>
               <span className="font-mono font-bold text-destructive">
-                {monthlyShortage.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
+                {fc(monthlyShortage)}
               </span>
             </div>
           </div>
@@ -253,10 +253,7 @@ function Overview() {
                     </div>
                     <div className="text-[11px] text-muted-foreground font-mono">
                       Stock: {safeNum(s.stock)} u | ROP: {s.opt.reorderPoint} u | Invest:{" "}
-                      {(s.opt.recommendedOrder * safeNum(s.unit_cost)).toLocaleString("fr-FR", {
-                        maximumFractionDigits: 0,
-                      })}{" "}
-                      €
+                      {fc(s.opt.recommendedOrder * safeNum(s.unit_cost))}
                     </div>
                   </div>
                   <div className="text-right">
