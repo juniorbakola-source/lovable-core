@@ -386,7 +386,6 @@ function POsPage() {
                       <td className="px-3 py-3 font-bold">
                         {fc(safeNum(p.quantity) * safeNum(p.unit_cost))}
                       </td>
-                      </td>
                       <td className="px-3 py-3 text-muted-foreground">
                         {p.expected_at ? new Date(p.expected_at).toLocaleDateString("fr-FR") : "—"}
                       </td>
