@@ -59,6 +59,7 @@ const MENU: MenuItem[] = [
 
 function DashboardLayout() {
   const { user, loading } = useAuth();
+  const { t } = useLocale();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -84,7 +85,8 @@ function DashboardLayout() {
 
   const activeLabel =
     MENU.find((m) => (m.exact ? location.pathname === m.to : location.pathname.startsWith(m.to)))
-      ?.label ?? "Dashboard";
+      ?.labelKey ?? "Dashboard";
+  const activeLabel = activeKey ? t(activeKey) : "Dashboard";
 
   const orgName = (user.user_metadata?.company as string | undefined) ?? "Mon Organisation";
   const initials = (user.email ?? "?").slice(0, 2).toUpperCase();
