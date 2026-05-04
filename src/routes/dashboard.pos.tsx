@@ -57,6 +57,7 @@ const EMPTY_FORM: CreateForm = {
 };
 
 function POsPage() {
+  const { fc } = useLocale();
   const [pos, setPOs] = useState<PO[]>([]);
   const [skuMap, setSkuMap] = useState<Map<string, Sku>>(new Map());
   const [skuList, setSkuList] = useState<Sku[]>([]);
@@ -217,7 +218,7 @@ function POsPage() {
             Valeur engagée
           </div>
           <div className="text-2xl font-bold mt-1">
-            {totalValue.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
+            {fc(totalValue)}
           </div>
         </div>
       </div>
@@ -380,13 +381,11 @@ function POsPage() {
                       </td>
                       <td className="px-3 py-3 font-bold">{safeNum(p.quantity)} u</td>
                       <td className="px-3 py-3 text-muted-foreground">
-                        {safeNum(p.unit_cost).toFixed(2)} €
+                        {fc(safeNum(p.unit_cost), { decimals: 2 })}
                       </td>
                       <td className="px-3 py-3 font-bold">
-                        {(safeNum(p.quantity) * safeNum(p.unit_cost)).toLocaleString("fr-FR", {
-                          maximumFractionDigits: 0,
-                        })}{" "}
-                        €
+                        {fc(safeNum(p.quantity) * safeNum(p.unit_cost))}
+                      </td>
                       </td>
                       <td className="px-3 py-3 text-muted-foreground">
                         {p.expected_at ? new Date(p.expected_at).toLocaleDateString("fr-FR") : "—"}
