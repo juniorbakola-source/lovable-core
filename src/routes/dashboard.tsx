@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate, useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocale } from "@/hooks/use-locale";
 import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart3,
@@ -38,22 +39,22 @@ type MenuItem = {
     | "/dashboard/pos"
     | "/dashboard/settings"
     | "/dashboard/methodologie";
-  label: string;
+  labelKey: string;
   icon: typeof BarChart3;
   exact?: boolean;
 };
 
 const MENU: MenuItem[] = [
-  { to: "/dashboard", label: "Vue Globale", icon: BarChart3, exact: true },
-  { to: "/dashboard/skus", label: "Gestion SKUs", icon: Package },
-  { to: "/dashboard/silvery", label: "Silvery Engine", icon: Zap },
-  { to: "/dashboard/connectors", label: "Connecteurs", icon: Plug },
-  { to: "/dashboard/forecasting", label: "Séries Temporelles IA", icon: TrendingUp },
-  { to: "/dashboard/solver", label: "Solveur Engine", icon: Cpu },
-  { to: "/dashboard/whatif", label: "Analyse What-If", icon: Sliders },
-  { to: "/dashboard/pos", label: "Bons de Commande", icon: FileText },
-  { to: "/dashboard/methodologie", label: "Méthodologie & Formules", icon: BookOpen },
-  { to: "/dashboard/settings", label: "Paramètres", icon: Settings },
+  { to: "/dashboard", labelKey: "nav.overview", icon: BarChart3, exact: true },
+  { to: "/dashboard/skus", labelKey: "nav.skus", icon: Package },
+  { to: "/dashboard/silvery", labelKey: "nav.silvery", icon: Zap },
+  { to: "/dashboard/connectors", labelKey: "nav.connectors", icon: Plug },
+  { to: "/dashboard/forecasting", labelKey: "nav.forecasting", icon: TrendingUp },
+  { to: "/dashboard/solver", labelKey: "nav.solver", icon: Cpu },
+  { to: "/dashboard/whatif", labelKey: "nav.whatif", icon: Sliders },
+  { to: "/dashboard/pos", labelKey: "nav.pos", icon: FileText },
+  { to: "/dashboard/methodologie", labelKey: "nav.methodology", icon: BookOpen },
+  { to: "/dashboard/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 function DashboardLayout() {
