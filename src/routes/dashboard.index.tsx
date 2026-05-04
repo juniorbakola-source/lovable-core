@@ -17,6 +17,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocale } from "@/hooks/use-locale";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
 
@@ -27,6 +28,7 @@ export const Route = createFileRoute("/dashboard/")({
 
 function Overview() {
   const { user } = useAuth();
+  const { fc, t } = useLocale();
   const [skus, setSkus] = useState<Sku[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
