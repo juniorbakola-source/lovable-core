@@ -359,7 +359,7 @@ function ConnectorsPage() {
                 </div>
                 {c.last_sync_at && (
                   <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2">
-                    Dernière sync: {new Date(c.last_sync_at).toLocaleString("fr-FR")}
+                    Dernière sync: {new Date(c.last_sync_at).toLocaleString()}
                     <span
                       className={cn(
                         "px-1.5 py-0.5 rounded-full text-[10px] font-bold border",

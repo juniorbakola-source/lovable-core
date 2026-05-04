@@ -387,7 +387,7 @@ function POsPage() {
                         {fc(safeNum(p.quantity) * safeNum(p.unit_cost))}
                       </td>
                       <td className="px-3 py-3 text-muted-foreground">
-                        {p.expected_at ? new Date(p.expected_at).toLocaleDateString("fr-FR") : "—"}
+                        {p.expected_at ? new Date(p.expected_at).toLocaleDateString() : "—"}
                       </td>
                       <td className="px-3 py-3">
                         <span
