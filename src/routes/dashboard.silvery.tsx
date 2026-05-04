@@ -122,14 +122,16 @@ function SilveryPage() {
     if (!user) return;
     setRunning(true);
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = supabase as any;
       // Create run record
-      const { data: runData, error: runErr } = await supabase
+      const { data: runData, error: runErr } = await sb
         .from("silvery_engine_runs")
         .insert({ user_id: user.id, trigger: "manual", status: "running" })
         .select()
         .single();
       if (runErr) throw runErr;
-      const runId = runData.id;
+      const runId = (runData as { id: string }).id;
 
       // Compute results
       const results = skus.map((s) => {
@@ -149,21 +151,21 @@ function SilveryPage() {
           recommended_order: r.recommendedOrder,
           status: r.status,
           days_of_cover: r.daysOfCover,
-          input_snapshot: input as unknown as import("@/integrations/supabase/types").Json,
+          input_snapshot: input as unknown as Record<string, unknown>,
         };
       });
 
       // Batch insert results
       const CHUNK = 500;
       for (let i = 0; i < results.length; i += CHUNK) {
-        const { error } = await supabase
+        const { error } = await sb
           .from("silvery_engine_results")
           .insert(results.slice(i, i + CHUNK));
         if (error) throw error;
       }
 
       // Mark run as completed
-      await supabase
+      await sb
         .from("silvery_engine_runs")
         .update({
           status: "completed",
