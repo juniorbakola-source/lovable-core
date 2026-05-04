@@ -95,6 +95,7 @@ const STATUS_STYLES: Record<StatusKey, { badge: string; icon: typeof Cpu }> = {
 };
 
 function SolverPage() {
+  const { fc, locale } = useLocale();
   const [skus, setSkus] = useState<Sku[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -237,8 +238,8 @@ function SolverPage() {
                       </td>
                       <td className="px-3 py-3 text-destructive font-mono">
                         {ruptureCost > 0
-                          ? `${ruptureCost.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`
-                          : "0 €"}
+                          ? fc(ruptureCost)
+                          : fc(0)}
                       </td>
                       <td className="px-3 py-3 text-right font-bold text-primary">
                         {r.opt.recommendedOrder > 0 ? (
