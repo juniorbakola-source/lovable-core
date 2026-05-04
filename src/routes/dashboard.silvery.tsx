@@ -20,7 +20,16 @@ import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
-type EngineRun = Database["public"]["Tables"]["silvery_engine_runs"]["Row"];
+
+// silvery_engine_runs is not yet in the generated types — use inline type
+type EngineRun = {
+  id: string;
+  status: string;
+  skus_processed: number;
+  created_at: string;
+  completed_at: string | null;
+  trigger: string;
+};
 
 type EngineResult = {
   id: string;
