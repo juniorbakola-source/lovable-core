@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocale, CURRENCIES, LANGUAGES } from "@/hooks/use-locale";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Settings as SettingsIcon, Building, KeyRound, Sparkles, Copy } from "lucide-react";
+import { Settings as SettingsIcon, Building, KeyRound, Sparkles, Copy, Globe } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/settings")({
   head: () => ({ meta: [{ title: "Paramètres — FlowStockAI" }] }),
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/dashboard/settings")({
 
 function SettingsPage() {
   const { user } = useAuth();
+  const { t, fc, lang, setLang, currency, setCurrency } = useLocale();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const orgName = (user?.user_metadata?.company as string | undefined) ?? "Mon Organisation";
@@ -31,13 +33,51 @@ function SettingsPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl lg:text-3xl font-bold tracking-tight flex items-center gap-2">
-          <SettingsIcon className="h-6 w-6 text-primary" /> Paramètres Compte & Organisation
+          <SettingsIcon className="h-6 w-6 text-primary" /> {t("settings.title")}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Gérez les configurations multi-tenant, abonnements et intégrations ERP.
         </p>
       </div>
 
+      {/* Locale & Currency */}
+      <section className="rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-base font-bold flex items-center gap-2 mb-4">
+          <Globe className="h-4 w-4 text-primary" /> {t("settings.locale")}
+        </h2>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1 block">
+              {t("settings.language")}
+            </label>
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value as typeof lang)}
+              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-1 block">
+              {t("settings.currency")}
+            </label>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as typeof currency)}
+              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm"
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.symbol} — {c.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* Profile */}
       <section className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-base font-bold flex items-center gap-2 mb-4">
           <Building className="h-4 w-4 text-primary" /> Profil Organisation
@@ -50,6 +90,7 @@ function SettingsPage() {
         </dl>
       </section>
 
+      {/* License */}
       <section className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-base font-bold flex items-center gap-2 mb-4">
           <Sparkles className="h-4 w-4 text-primary" /> Licence & Abonnement
@@ -63,23 +104,19 @@ function SettingsPage() {
             <div className="text-xs text-muted-foreground">Période d'essai PRO active</div>
           </div>
           <div className="text-right">
-            <div className="text-lg font-bold">199,00 €</div>
-            <div className="text-xs text-muted-foreground">/ mois</div>
+            <div className="text-lg font-bold">{fc(199)}</div>
+            <div className="text-xs text-muted-foreground">{t("common.per_month")}</div>
           </div>
-        </div>
-        <div className="mt-4 space-y-2 text-sm font-mono">
-          <div className="flex justify-between"><span className="text-muted-foreground">Quota Utilisateurs :</span><span className="font-bold">1 / 5</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Quota SKUs :</span><span className="font-bold">Actif (limite 1 000)</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Calculateur What-If :</span><span className="text-primary font-bold">Débloqué ✓</span></div>
         </div>
       </section>
 
+      {/* API Key */}
       <section className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-base font-bold flex items-center gap-2 mb-2">
           <KeyRound className="h-4 w-4 text-primary" /> Clé API Intégration ERP
         </h2>
         <p className="text-xs text-muted-foreground mb-4">
-          Connectez vos ERPs (Odoo, SAP, NetSuite) via REST API. Authentifiez-vous avec : <code className="text-primary">Authorization: Bearer [CLE_API]</code>
+          Connectez vos ERPs (Odoo, SAP, NetSuite) via REST API. <code className="text-primary">Authorization: Bearer [CLE_API]</code>
         </p>
         <div className="flex gap-2">
           <code className="flex-1 px-3 py-2 rounded-xl bg-background border border-border text-xs font-mono text-primary truncate">{fakeApiKey}</code>
@@ -92,6 +129,7 @@ function SettingsPage() {
         </div>
       </section>
 
+      {/* Security */}
       <section className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-base font-bold mb-4">Sécurité</h2>
         <form onSubmit={changePassword} className="flex flex-col sm:flex-row gap-2">
