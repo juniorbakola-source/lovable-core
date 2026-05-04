@@ -83,10 +83,10 @@ function DashboardLayout() {
     navigate({ to: "/" });
   }
 
-  const activeLabel =
+  const activeKey =
     MENU.find((m) => (m.exact ? location.pathname === m.to : location.pathname.startsWith(m.to)))
-      ?.labelKey ?? "Dashboard";
-  const activeLabel = activeKey ? t(activeKey) : "Dashboard";
+      ?.labelKey ?? "nav.overview";
+  const activeLabel = t(activeKey);
 
   const orgName = (user.user_metadata?.company as string | undefined) ?? "Mon Organisation";
   const initials = (user.email ?? "?").slice(0, 2).toUpperCase();
@@ -138,7 +138,7 @@ function DashboardLayout() {
                 <Icon
                   className={cn("h-4 w-4", active ? "text-primary" : "text-sidebar-foreground/50")}
                 />
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             );
           })}
@@ -149,7 +149,7 @@ function DashboardLayout() {
             onClick={signOut}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 transition-colors"
           >
-            <LogOut className="h-4 w-4" /> Déconnexion
+            <LogOut className="h-4 w-4" /> {t("action.logout")}
           </button>
           <div className="text-[10px] text-muted-foreground font-mono text-center">
             v1.0.0-standalone © 2026
@@ -201,7 +201,7 @@ function DashboardLayout() {
                     )}
                   >
                     <Icon className="h-4 w-4" />
-                    {item.label}
+                    {t(item.labelKey)}
                   </Link>
                 );
               })}
