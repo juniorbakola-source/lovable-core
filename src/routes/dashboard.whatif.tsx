@@ -5,6 +5,7 @@ import { optimize, zScore } from "@/lib/optimizer";
 import { toSkuInput, safeNum } from "@/lib/sku-helpers";
 import type { Database } from "@/integrations/supabase/types";
 import { Sliders } from "lucide-react";
+import { useLocale } from "@/hooks/use-locale";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
 

@@ -7,6 +7,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { Cpu, ShoppingCart, AlertTriangle, CheckCircle2, Package, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/hooks/use-locale";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
 

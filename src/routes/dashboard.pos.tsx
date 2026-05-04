@@ -6,6 +6,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { FileText, Package, CheckCircle2, Truck, XCircle, Clock, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/hooks/use-locale";
 
 type PO = Database["public"]["Tables"]["purchase_orders"]["Row"];
 type Sku = Database["public"]["Tables"]["skus"]["Row"];

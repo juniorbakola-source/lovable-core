@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { runSilveryEngine } from "@/lib/silvery-engine";
 import { toSkuInput, safeNum } from "@/lib/sku-helpers";
+import { useLocale } from "@/hooks/use-locale";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
