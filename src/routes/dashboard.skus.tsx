@@ -668,7 +668,7 @@ function SkusPage() {
                   {importLogs.map((log) => (
                     <tr key={log.id} className="border-t border-border">
                       <td className="p-2 font-mono">
-                        {new Date(log.created_at).toLocaleString("fr-FR")}
+                        {new Date(log.created_at).toLocaleString()}
                       </td>
                       <td className="p-2">{log.source_type}</td>
                       <td className="p-2 text-muted-foreground truncate max-w-[120px]">

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { runSilveryEngine } from "@/lib/silvery-engine";
 import { toSkuInput, safeNum } from "@/lib/sku-helpers";
+import { useLocale } from "@/hooks/use-locale";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +79,7 @@ export const Route = createFileRoute("/dashboard/silvery")({
 
 function SilveryPage() {
   const { user } = useAuth();
+  const { fc, locale } = useLocale();
   const [skus, setSkus] = useState<Sku[]>([]);
   const [runs, setRuns] = useState<EngineRun[]>([]);
   const [lastResults, setLastResults] = useState<EngineResult[]>([]);
@@ -292,7 +294,7 @@ function SilveryPage() {
                   {runs.map((run) => (
                     <tr key={run.id} className="border-t border-border">
                       <td className="p-2 font-mono">
-                        {new Date(run.created_at).toLocaleString("fr-FR")}
+                        {new Date(run.created_at).toLocaleString(locale)}
                       </td>
                       <td className="p-2">{run.trigger === "scheduled" ? "Planifié" : "Manuel"}</td>
                       <td className="p-2 text-right">{run.skus_processed}</td>
@@ -372,9 +374,7 @@ function SilveryPage() {
                       <td className="px-3 py-3 text-right font-mono">{r.break_even_qty ?? "—"}</td>
                       <td className="px-3 py-3 text-right font-mono">
                         {r.break_even_value != null
-                          ? r.break_even_value.toLocaleString("fr-FR", {
-                              maximumFractionDigits: 0,
-                            }) + " €"
+                          ? fc(r.break_even_value)
                           : "—"}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-muted-foreground">

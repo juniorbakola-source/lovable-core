@@ -5,6 +5,7 @@ import { optimize, zScore } from "@/lib/optimizer";
 import { toSkuInput, safeNum } from "@/lib/sku-helpers";
 import type { Database } from "@/integrations/supabase/types";
 import { Sliders } from "lucide-react";
+import { useLocale } from "@/hooks/use-locale";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
 
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/dashboard/whatif")({
 });
 
 function WhatIfPage() {
+  const { fn, locale } = useLocale();
   const [skus, setSkus] = useState<Sku[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [serviceLevel, setServiceLevel] = useState(0.95);
@@ -137,15 +139,16 @@ function SliderRow({ label, value, min, max, step, onChange, display }: {
 }
 
 function CompareRow({ label, base, sim, unit }: { label: string; base: number; sim: number; unit: string }) {
+  const { locale } = useLocale();
   const delta = sim - base;
   const sign = delta > 0 ? "+" : "";
   const color = delta > 0 ? "text-warning" : delta < 0 ? "text-success" : "text-muted-foreground";
   return (
     <tr className="border-t border-border">
       <td className="py-2.5 text-foreground/80 font-sans text-xs">{label}</td>
-      <td className="py-2.5 text-right text-muted-foreground">{base.toLocaleString("fr-FR")} {unit}</td>
-      <td className="py-2.5 text-right text-primary font-bold">{sim.toLocaleString("fr-FR")} {unit}</td>
-      <td className={`py-2.5 text-right ${color} font-bold`}>{sign}{delta.toLocaleString("fr-FR")}</td>
+      <td className="py-2.5 text-right text-muted-foreground">{base.toLocaleString(locale)} {unit}</td>
+      <td className="py-2.5 text-right text-primary font-bold">{sim.toLocaleString(locale)} {unit}</td>
+      <td className={`py-2.5 text-right ${color} font-bold`}>{sign}{delta.toLocaleString(locale)}</td>
     </tr>
   );
 }
