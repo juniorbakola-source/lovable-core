@@ -208,7 +208,8 @@ export async function upsertSkus(
         .filter((r) => r.sku_id !== "");
 
       if (historyRows.length > 0) {
-        await supabase.from("sku_change_history").insert(historyRows);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("sku_change_history").insert(historyRows);
       }
 
       const chunkInserted = chunk.filter((r) => !existingSet.has(r.sku_code)).length;
@@ -219,7 +220,8 @@ export async function upsertSkus(
   }
 
   // Write import log
-  await supabase.from("sku_import_logs").insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("sku_import_logs").insert({
     user_id: userId,
     source_type: sourceType,
     connector_id: opts?.connectorId ?? null,
@@ -228,7 +230,7 @@ export async function upsertSkus(
     rows_inserted: inserted,
     rows_updated: updated,
     rows_failed: errors.length,
-    errors: errors.length ? (errors as unknown as import("@/integrations/supabase/types").Json) : null,
+    errors: errors.length ? errors : null,
     status: errors.length === rawSkus.length ? "failed" : errors.length > 0 ? "partial" : "success",
   });
 
