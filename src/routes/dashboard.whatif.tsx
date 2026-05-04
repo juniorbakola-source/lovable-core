@@ -139,6 +139,7 @@ function SliderRow({ label, value, min, max, step, onChange, display }: {
 }
 
 function CompareRow({ label, base, sim, unit }: { label: string; base: number; sim: number; unit: string }) {
+  const { locale } = useLocale();
   const delta = sim - base;
   const sign = delta > 0 ? "+" : "";
   const color = delta > 0 ? "text-warning" : delta < 0 ? "text-success" : "text-muted-foreground";
