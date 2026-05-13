@@ -241,16 +241,23 @@ Deno.serve(async (req) => {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("optimize-min-max error:", message);
-    const status = message.includes("429") ? 429 : message.includes("402") ? 402 : 500;
-    const clientErrorMessage =
-      status === 429
-        ? "Rate limit reached. Please retry in a moment."
-        : status === 402
-          ? "Billing limit reached for AI optimization."
-          : "Optimization failed. Please retry later.";
-    return new Response(JSON.stringify({ error: clientErrorMessage }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const isRate = message.includes("429");
+    const isBilling = message.includes("402");
+    const clientErrorMessage = isRate
+      ? "Rate limit reached. Please retry in a moment."
+      : isBilling
+        ? "Billing limit reached for AI optimization."
+        : "Optimization failed. Please retry later.";
+    // Return 200 with a fallback flag so the platform's runtime monitor
+    // does not flag transient AI gateway errors (402/429) as a blank-screen crash.
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        fallback: true,
+        code: isBilling ? "BILLING_LIMIT" : isRate ? "RATE_LIMIT" : "OPTIMIZATION_FAILED",
+        error: clientErrorMessage,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 });

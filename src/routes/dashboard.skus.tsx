@@ -394,11 +394,12 @@ function SkusPage() {
         },
       });
       const json = await resp.json();
-      if (!resp.ok) {
-        if (resp.status === 429) toast.error("AI rate limit reached, try again shortly.");
-        else if (resp.status === 402)
+      if (!resp.ok || json?.fallback || json?.ok === false) {
+        if (json?.code === "RATE_LIMIT" || resp.status === 429)
+          toast.error("AI rate limit reached, try again shortly.");
+        else if (json?.code === "BILLING_LIMIT" || resp.status === 402)
           toast.error("AI credits exhausted. Top up in Settings → Workspace.");
-        else toast.error(json.error || "Optimization failed");
+        else toast.error(json?.error || "Optimization failed");
         return;
       }
       toast.success(`AI optimized ${json.succeeded}/${json.processed} SKUs`);
