@@ -5,8 +5,36 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Play, RefreshCw, Download } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Loader2,
+  Play,
+  RefreshCw,
+  Download,
+  Search,
+  Pencil,
+  AlertTriangle,
+  TrendingUp,
+  PackageCheck,
+  CheckCircle2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 import type { Database } from "@/integrations/supabase/types";
 
 type Sku = Database["public"]["Tables"]["skus"]["Row"];
@@ -35,6 +63,8 @@ const zScore = (sl: number) => {
   return Z_TABLE[k];
 };
 
+type ActionKey = "urgent" | "reorder" | "overstock" | "ok";
+
 type Result = {
   sku_id: string;
   sku: string;
@@ -52,6 +82,7 @@ type Result = {
   shortage: number;
   overstock: number;
   action: string;
+  actionKey: ActionKey;
   order_qty: number;
   notes: string[];
 };
@@ -117,20 +148,24 @@ function analyse(sku: Sku, cfg: Cfg): Result {
   if (last_cost === 0) notes.push("⚠ Coût unitaire = 0");
 
   let action = "🟢 OK";
+  let actionKey: ActionKey = "ok";
   let order_qty = 0;
   if (annual_demand === 0) {
     action = "NO ACTION";
     notes.push("ℹ Aucune consommation");
   } else if (shortage > 0) {
     action = "🔴 ORDER NOW";
+    actionKey = "urgent";
     order_qty = Math.max(eoq, max_qty - effective_stock);
     notes.push(`Stock sous ROP de ${shortage.toFixed(0)}u`);
   } else if (effective_stock <= reorder_point) {
     action = "🟡 REORDER";
+    actionKey = "reorder";
     order_qty = eoq;
     notes.push("Stock au ROP");
   } else if (overstock > 0) {
     action = "🟢 OVERSTOCK";
+    actionKey = "overstock";
     notes.push(`Surstock de ${overstock.toFixed(0)}u`);
   }
 
@@ -151,6 +186,7 @@ function analyse(sku: Sku, cfg: Cfg): Result {
     shortage,
     overstock,
     action,
+    actionKey,
     order_qty,
     notes,
   };
@@ -165,6 +201,9 @@ function OptimizerPage() {
   const [running, setRunning] = useState(false);
   const [cached, setCached] = useState(false);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ActionKey | null>(null);
+  const [editing, setEditing] = useState<Sku | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [cfg, setCfg] = useState<Cfg>({
     ordering_cost: 50,
     holding_rate: 0.25,
@@ -174,7 +213,6 @@ function OptimizerPage() {
 
   const cacheKey = user ? `optimizer-results-${user.id}` : null;
 
-  // Initial load — fetch SKUs and check cache
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -189,7 +227,6 @@ function OptimizerPage() {
         return;
       }
       setSkus(data ?? []);
-      // Check cache — "Si elle existe, ne pas exécuter"
       if (cacheKey) {
         const raw = localStorage.getItem(cacheKey);
         if (raw) {
@@ -209,7 +246,6 @@ function OptimizerPage() {
     })();
   }, [user, cacheKey]);
 
-  // Auto-run on first load if no cache and SKUs present
   useEffect(() => {
     if (loading || cached || running || results.length > 0) return;
     if (skus.length === 0) return;
@@ -217,14 +253,15 @@ function OptimizerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, cached, skus.length]);
 
-  function runAnalysis() {
-    if (skus.length === 0) {
+  function runAnalysis(skusOverride?: Sku[]) {
+    const list = skusOverride ?? skus;
+    if (list.length === 0) {
       toast.error("Aucun SKU dans la base de données");
       return;
     }
     setRunning(true);
     setTimeout(() => {
-      const out = skus.map((s) => analyse(s, cfg));
+      const out = list.map((s) => analyse(s, cfg));
       setResults(out);
       setCached(false);
       if (cacheKey) {
@@ -242,22 +279,78 @@ function OptimizerPage() {
     toast.success("Cache effacé — relance possible");
   }
 
+  // Click on KPI card filters the list and scrolls to the report
+  function selectStatus(key: ActionKey) {
+    setStatusFilter((prev) => (prev === key ? null : key));
+    setTimeout(() => {
+      document.getElementById("optimizer-report")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+  }
+
+  // Highlight a row when clicking a chart bar
+  function focusSku(sku: string) {
+    setSearch(sku);
+    setStatusFilter(null);
+    setTimeout(() => {
+      const el = document.getElementById(`row-${sku}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-primary");
+        setTimeout(() => el.classList.remove("ring-2", "ring-primary"), 1800);
+      }
+    }, 80);
+  }
+
+  async function saveEdit(patch: Partial<Sku>) {
+    if (!editing) return;
+    setSavingEdit(true);
+    const { error } = await supabase.from("skus").update(patch).eq("id", editing.id);
+    if (error) {
+      toast.error("Erreur de mise à jour");
+      setSavingEdit(false);
+      return;
+    }
+    const newSkus = skus.map((s) => (s.id === editing.id ? { ...s, ...patch } : s));
+    setSkus(newSkus);
+    setEditing(null);
+    setSavingEdit(false);
+    toast.success("SKU mis à jour");
+    runAnalysis(newSkus);
+  }
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return results;
-    const q = search.toLowerCase();
-    return results.filter((r) => r.sku.toLowerCase().includes(q));
-  }, [results, search]);
+    let out = results;
+    if (statusFilter) out = out.filter((r) => r.actionKey === statusFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      out = out.filter((r) => r.sku.toLowerCase().includes(q));
+    }
+    return out;
+  }, [results, search, statusFilter]);
 
   const kpis = useMemo(() => {
     let urgent = 0, reorder = 0, overstock = 0, ok = 0;
     for (const r of results) {
-      if (r.action.startsWith("🔴")) urgent++;
-      else if (r.action.startsWith("🟡")) reorder++;
-      else if (r.action.startsWith("🟢 OVERSTOCK")) overstock++;
+      if (r.actionKey === "urgent") urgent++;
+      else if (r.actionKey === "reorder") reorder++;
+      else if (r.actionKey === "overstock") overstock++;
       else ok++;
     }
     return { urgent, reorder, overstock, ok };
   }, [results]);
+
+  const topShortage = useMemo(
+    () =>
+      [...results]
+        .filter((r) => r.shortage > 0)
+        .sort((a, b) => b.shortage - a.shortage)
+        .slice(0, 8)
+        .map((r) => ({ sku: r.sku, shortage: Math.round(r.shortage), rop: r.reorder_point })),
+    [results],
+  );
 
   function exportCsv() {
     const headers = [
@@ -291,18 +384,34 @@ function OptimizerPage() {
     );
   }
 
+  const kpiCards: { key: ActionKey; label: string; icon: typeof AlertTriangle; tone: string; val: number }[] = [
+    { key: "urgent", label: "Commander", icon: AlertTriangle, tone: "text-destructive border-destructive/40", val: kpis.urgent },
+    { key: "reorder", label: "Réapprovisionner", icon: TrendingUp, tone: "text-warning border-warning/40", val: kpis.reorder },
+    { key: "overstock", label: "Surstock", icon: PackageCheck, tone: "text-chart-5 border-chart-5/40", val: kpis.overstock },
+    { key: "ok", label: "OK", icon: CheckCircle2, tone: "text-success border-success/40", val: kpis.ok },
+  ];
+
   return (
     <div className="p-6 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight">📦 Inventory Optimizer</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Calcul EOQ, Stock de Sécurité, Min (ROP) et Max sur les SKUs de votre base.
-          {cached && (
-            <span className="ml-2 text-primary">
-              · Résultats en cache (pas de recalcul)
-            </span>
-          )}
-        </p>
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">📦 Inventory Optimizer</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            EOQ, Stock de Sécurité, Min (ROP), Max — dashboard interactif.
+            {cached && (
+              <span className="ml-2 text-primary">· Résultats en cache</span>
+            )}
+          </p>
+        </div>
+        <div className="relative w-full sm:w-72">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher un SKU…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </header>
 
       {/* Config */}
@@ -311,50 +420,28 @@ function OptimizerPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <Label className="text-xs">Coût de commande</Label>
-            <Input
-              type="number"
-              value={cfg.ordering_cost}
-              onChange={(e) => setCfg({ ...cfg, ordering_cost: parseFloat(e.target.value) || 0 })}
-            />
+            <Input type="number" value={cfg.ordering_cost}
+              onChange={(e) => setCfg({ ...cfg, ordering_cost: parseFloat(e.target.value) || 0 })} />
           </div>
           <div>
             <Label className="text-xs">Taux possession (%)</Label>
-            <Input
-              type="number"
-              value={cfg.holding_rate * 100}
-              onChange={(e) =>
-                setCfg({ ...cfg, holding_rate: (parseFloat(e.target.value) || 0) / 100 })
-              }
-            />
+            <Input type="number" value={cfg.holding_rate * 100}
+              onChange={(e) => setCfg({ ...cfg, holding_rate: (parseFloat(e.target.value) || 0) / 100 })} />
           </div>
           <div>
             <Label className="text-xs">Délai (jours)</Label>
-            <Input
-              type="number"
-              value={cfg.lead_time_days}
-              onChange={(e) =>
-                setCfg({ ...cfg, lead_time_days: parseInt(e.target.value) || 0 })
-              }
-            />
+            <Input type="number" value={cfg.lead_time_days}
+              onChange={(e) => setCfg({ ...cfg, lead_time_days: parseInt(e.target.value) || 0 })} />
           </div>
           <div>
             <Label className="text-xs">Niveau de service (%)</Label>
-            <Input
-              type="number"
-              value={cfg.service_level * 100}
-              onChange={(e) =>
-                setCfg({ ...cfg, service_level: (parseFloat(e.target.value) || 0) / 100 })
-              }
-            />
+            <Input type="number" value={cfg.service_level * 100}
+              onChange={(e) => setCfg({ ...cfg, service_level: (parseFloat(e.target.value) || 0) / 100 })} />
           </div>
         </div>
         <div className="flex gap-2 mt-4 flex-wrap">
-          <Button onClick={runAnalysis} disabled={running}>
-            {running ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4 mr-2" />
-            )}
+          <Button onClick={() => runAnalysis()} disabled={running}>
+            {running ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
             {results.length === 0 ? "Lancer l'analyse" : "Relancer"}
           </Button>
           {results.length > 0 && (
@@ -370,34 +457,80 @@ function OptimizerPage() {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* Interactive KPI cards */}
       {results.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: "🔴 Commander", val: kpis.urgent, c: "text-red-500" },
-            { label: "🟡 Réapprovisionner", val: kpis.reorder, c: "text-amber-500" },
-            { label: "🟢 Surstock", val: kpis.overstock, c: "text-green-500" },
-            { label: "🟢 OK", val: kpis.ok, c: "text-muted-foreground" },
-          ].map((k) => (
-            <div key={k.label} className="rounded-2xl border border-border bg-card p-4">
-              <div className={`text-xs font-bold ${k.c}`}>{k.label}</div>
-              <div className="text-3xl font-bold mt-1">{k.val}</div>
-            </div>
-          ))}
+          {kpiCards.map((k) => {
+            const active = statusFilter === k.key;
+            const Icon = k.icon;
+            return (
+              <button
+                key={k.key}
+                onClick={() => selectStatus(k.key)}
+                className={`text-left rounded-2xl border bg-card p-4 transition-all hover:shadow-[var(--shadow-elegant)] hover:-translate-y-0.5 ${
+                  active ? "ring-2 ring-primary border-primary" : "border-border"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className={`text-xs font-bold ${k.tone.split(" ")[0]}`}>{k.label}</div>
+                  <Icon className={`h-4 w-4 ${k.tone.split(" ")[0]}`} />
+                </div>
+                <div className="text-3xl font-bold mt-1">{k.val}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  {active ? "Filtre actif — clic pour réinitialiser" : "Cliquer pour filtrer"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Chart — interactive */}
+      {topShortage.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <h3 className="text-sm font-bold mb-1">📊 Top 8 ruptures (clic pour cibler)</h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Manque par rapport au point de commande.
+          </p>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={topShortage}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="sku" stroke="var(--muted-foreground)" fontSize={11} />
+              <YAxis stroke="var(--muted-foreground)" fontSize={11} />
+              <Tooltip contentStyle={{
+                background: "var(--card)", border: "1px solid var(--border)",
+                borderRadius: 8, color: "var(--foreground)",
+              }} />
+              <Bar
+                dataKey="shortage"
+                fill="var(--destructive)"
+                radius={[6, 6, 0, 0]}
+                cursor="pointer"
+                onClick={(d) => {
+                  const payload = (d as { payload?: { sku?: string } })?.payload;
+                  if (payload?.sku) focusSku(payload.sku);
+                }}
+              />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       )}
 
       {/* Table */}
       {results.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="p-4 flex items-center justify-between gap-2 border-b border-border">
-            <h3 className="text-sm font-bold">📋 Rapport ({filtered.length})</h3>
-            <Input
-              placeholder="Rechercher SKU…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs"
-            />
+        <div id="optimizer-report" className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="p-4 flex items-center justify-between gap-2 border-b border-border flex-wrap">
+            <h3 className="text-sm font-bold">
+              📋 Rapport ({filtered.length}/{results.length})
+            </h3>
+            {(statusFilter || search) && (
+              <button
+                onClick={() => { setStatusFilter(null); setSearch(""); }}
+                className="text-xs inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3" /> Réinitialiser les filtres
+              </button>
+            )}
           </div>
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-xs">
@@ -414,30 +547,51 @@ function OptimizerPage() {
                   <th className="text-right p-2">Couv. (j)</th>
                   <th className="text-right p-2">Dem./an</th>
                   <th className="text-left p-2">Notes</th>
+                  <th className="p-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => (
-                  <tr key={r.sku_id} className="border-t border-border hover:bg-muted/20">
-                    <td className="p-2 font-mono">{r.sku}</td>
-                    <td className="p-2 font-bold">{r.action}</td>
-                    <td className="p-2 text-right font-mono">{r.order_qty.toLocaleString()}</td>
-                    <td className="p-2 text-right font-mono">{r.eoq.toLocaleString()}</td>
-                    <td className="p-2 text-right font-mono">{r.reorder_point}</td>
-                    <td className="p-2 text-right font-mono">{r.max_qty}</td>
-                    <td className="p-2 text-right font-mono">{r.safety_stock}</td>
-                    <td className="p-2 text-right font-mono">{r.effective_stock.toFixed(0)}</td>
-                    <td className="p-2 text-right font-mono">
-                      {r.coverage_days >= 999 ? "∞" : r.coverage_days.toFixed(0)}
-                    </td>
-                    <td className="p-2 text-right font-mono">
-                      {r.annual_demand.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </td>
-                    <td className="p-2 text-muted-foreground truncate max-w-[200px]">
-                      {r.notes.join(" | ")}
+                {filtered.map((r) => {
+                  const sku = skus.find((s) => s.id === r.sku_id);
+                  return (
+                    <tr key={r.sku_id} id={`row-${r.sku}`} className="border-t border-border hover:bg-muted/20 transition-all">
+                      <td className="p-2 font-mono">{r.sku}</td>
+                      <td className="p-2 font-bold">{r.action}</td>
+                      <td className="p-2 text-right font-mono">{r.order_qty.toLocaleString()}</td>
+                      <td className="p-2 text-right font-mono">{r.eoq.toLocaleString()}</td>
+                      <td className="p-2 text-right font-mono">{r.reorder_point}</td>
+                      <td className="p-2 text-right font-mono">{r.max_qty}</td>
+                      <td className="p-2 text-right font-mono">{r.safety_stock}</td>
+                      <td className="p-2 text-right font-mono">{r.effective_stock.toFixed(0)}</td>
+                      <td className="p-2 text-right font-mono">
+                        {r.coverage_days >= 999 ? "∞" : r.coverage_days.toFixed(0)}
+                      </td>
+                      <td className="p-2 text-right font-mono">
+                        {r.annual_demand.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </td>
+                      <td className="p-2 text-muted-foreground truncate max-w-[200px]">
+                        {r.notes.join(" | ")}
+                      </td>
+                      <td className="p-2">
+                        {sku && (
+                          <button
+                            onClick={() => setEditing(sku)}
+                            className="inline-flex items-center gap-1 text-primary hover:underline text-[11px]"
+                          >
+                            <Pencil className="h-3 w-3" /> Modifier
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={12} className="p-8 text-center text-muted-foreground">
+                      Aucun résultat — ajustez les filtres ou la recherche.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -449,6 +603,72 @@ function OptimizerPage() {
           Aucun SKU dans la base. Importez vos données depuis l'onglet « Gestion SKUs ».
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifier {editing?.sku_code ?? editing?.name}</DialogTitle>
+          </DialogHeader>
+          {editing && <EditForm sku={editing} onSave={saveEdit} saving={savingEdit} />}
+          <DialogFooter />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function EditForm({
+  sku, onSave, saving,
+}: {
+  sku: Sku;
+  onSave: (patch: Partial<Sku>) => void;
+  saving: boolean;
+}) {
+  const [stock, setStock] = useState(Number(sku.stock ?? 0));
+  const [onOrder, setOnOrder] = useState(Number(sku.on_order ?? 0));
+  const [unitCost, setUnitCost] = useState(Number(sku.unit_cost ?? 0));
+  const [leadTime, setLeadTime] = useState(Number(sku.lead_time_days ?? 14));
+  const [serviceLevel, setServiceLevel] = useState(Number(sku.service_level ?? 0.95));
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs">Stock</Label>
+          <Input type="number" value={stock} onChange={(e) => setStock(parseFloat(e.target.value) || 0)} />
+        </div>
+        <div>
+          <Label className="text-xs">En commande</Label>
+          <Input type="number" value={onOrder} onChange={(e) => setOnOrder(parseFloat(e.target.value) || 0)} />
+        </div>
+        <div>
+          <Label className="text-xs">Coût unitaire</Label>
+          <Input type="number" value={unitCost} onChange={(e) => setUnitCost(parseFloat(e.target.value) || 0)} />
+        </div>
+        <div>
+          <Label className="text-xs">Délai (jours)</Label>
+          <Input type="number" value={leadTime} onChange={(e) => setLeadTime(parseInt(e.target.value) || 0)} />
+        </div>
+        <div className="col-span-2">
+          <Label className="text-xs">Niveau de service (0-1)</Label>
+          <Input type="number" step="0.01" min="0" max="1" value={serviceLevel}
+            onChange={(e) => setServiceLevel(parseFloat(e.target.value) || 0)} />
+        </div>
+      </div>
+      <Button
+        className="w-full"
+        disabled={saving}
+        onClick={() =>
+          onSave({
+            stock, on_order: onOrder, unit_cost: unitCost,
+            lead_time_days: leadTime, service_level: serviceLevel,
+          })
+        }
+      >
+        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+        Enregistrer
+      </Button>
     </div>
   );
 }
