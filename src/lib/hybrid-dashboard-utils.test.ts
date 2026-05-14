@@ -15,6 +15,12 @@ describe("getVolatilityBand", () => {
   it("classifies high volatility", () => {
     expect(getVolatilityBand(0.36)).toBe("high");
   });
+
+  it("handles non-finite or negative values safely", () => {
+    expect(getVolatilityBand(-1)).toBe("low");
+    expect(getVolatilityBand(Infinity)).toBe("low");
+    expect(getVolatilityBand(-Infinity)).toBe("low");
+  });
 });
 
 describe("escapeCsvCell", () => {
@@ -28,5 +34,10 @@ describe("escapeCsvCell", () => {
 
   it("normalizes CRLF and strips null bytes", () => {
     expect(escapeCsvCell("line1\r\nline2\u0000")).toBe('"line1\nline2"');
+  });
+
+  it("normalizes standalone carriage returns and repeated null bytes", () => {
+    expect(escapeCsvCell("line1\rline2")).toBe('"line1\nline2"');
+    expect(escapeCsvCell("text\u0000\u0000more")).toBe('"textmore"');
   });
 });

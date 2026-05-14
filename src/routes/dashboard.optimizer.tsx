@@ -155,6 +155,7 @@ function monthLabel(date: Date) {
 }
 
 function extractChartSku(chartState: unknown): string | null {
+  // Recharts click payload shape: { activePayload: [{ payload: { sku: string } }] }
   if (!chartState || typeof chartState !== "object") return null;
   const activePayload = (chartState as { activePayload?: unknown }).activePayload;
   if (!Array.isArray(activePayload) || activePayload.length === 0) return null;
@@ -213,6 +214,7 @@ function analyse(sku: Sku, cfg: Cfg): Result {
   const histY = (sku.demand_history_yearly ?? []) as number[];
   const forecast3m = (sku.forecast_3m ?? []) as number[];
 
+  // Partial windows are accepted: if fewer than 3 points exist, we use available values.
   const hist_3m = forecast3m.length > 0 ? sum(forecast3m.slice(-3)) : sum(hist.slice(-3));
   const hist_1y = histY.length > 0 ? sum(histY) : sum(hist.slice(-12));
 
@@ -632,6 +634,7 @@ function OptimizerPage() {
     );
 
     const csv = [headers.map(escapeCsvCell).join(","), ...rows].join("\n");
+    // UTF-8 BOM is added for robust Excel import compatibility.
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -709,9 +712,13 @@ function OptimizerPage() {
             <Input
               type="number"
               value={cfg.lead_time_days}
-              onChange={(e) =>
-                setCfg({ ...cfg, lead_time_days: parseInt(e.target.value, 10) || 0 })
-              }
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10);
+                setCfg({
+                  ...cfg,
+                  lead_time_days: !Number.isNaN(parsed) && parsed > 0 ? parsed : cfg.lead_time_days,
+                });
+              }}
             />
           </div>
           <div>
@@ -729,19 +736,26 @@ function OptimizerPage() {
             <Input
               type="number"
               value={cfg.business_days_per_year}
-              onChange={(e) =>
-                setCfg({ ...cfg, business_days_per_year: parseInt(e.target.value, 10) || 260 })
-              }
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10);
+                setCfg({
+                  ...cfg,
+                  business_days_per_year:
+                    !Number.isNaN(parsed) && parsed > 0 ? parsed : cfg.business_days_per_year,
+                });
+              }}
             />
           </div>
           <div>
             <Label className="text-xs">Demande simulée (%)</Label>
             <Input
               type="number"
-              value={(cfg.demand_multiplier * 100).toFixed(0)}
-              onChange={(e) =>
-                setCfg({ ...cfg, demand_multiplier: (parseFloat(e.target.value) || 0) / 100 })
-              }
+              value={Math.round(cfg.demand_multiplier * 100)}
+              onChange={(e) => {
+                const parsed = parseFloat(e.target.value);
+                const multiplier = !Number.isNaN(parsed) ? Math.max(parsed / 100, 0) : 0;
+                setCfg({ ...cfg, demand_multiplier: multiplier });
+              }}
             />
           </div>
         </div>
