@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 import {
   DEFAULT_CONFIG,
+  INFINITE_COVERAGE_DAYS,
   toInventorySku,
   type InventoryConfig,
   type InventoryResult,
@@ -82,7 +83,7 @@ function HybridInventoryPage() {
         acc.totalAnnualDemand += result.annualDemand;
         acc.avgCoverageTarget += result.coverageTargetDays;
         acc.avgCoverageCurrent +=
-          result.currentCoverageDays >= 9999 ? 0 : result.currentCoverageDays;
+          result.currentCoverageDays >= INFINITE_COVERAGE_DAYS ? 0 : result.currentCoverageDays;
         if (result.recommendedOrderQty > 0) acc.toOrder += 1;
         if (result.recommendation.includes("Surstock")) acc.overstock += 1;
         if (result.isVolatile) acc.volatile += 1;
@@ -125,7 +126,7 @@ function HybridInventoryPage() {
         r.reorderPoint.toFixed(0),
         r.maxQuantity.toFixed(0),
         r.effectiveStock.toFixed(0),
-        r.currentCoverageDays >= 9999 ? "∞" : r.currentCoverageDays.toFixed(2),
+        r.currentCoverageDays >= INFINITE_COVERAGE_DAYS ? "∞" : r.currentCoverageDays.toFixed(2),
         r.volatility.toFixed(4),
         r.isSeasonal ? "true" : "false",
         r.isImmature ? "true" : "false",
@@ -302,7 +303,9 @@ function HybridInventoryPage() {
                     <td className="p-2 text-right font-mono">{r.maxQuantity.toFixed(0)}</td>
                     <td className="p-2 text-right font-mono">{r.effectiveStock.toFixed(0)}</td>
                     <td className="p-2 text-right font-mono">
-                      {r.currentCoverageDays >= 9999 ? "∞" : `${r.currentCoverageDays.toFixed(0)}j`}
+                      {r.currentCoverageDays >= INFINITE_COVERAGE_DAYS
+                        ? "∞"
+                        : `${r.currentCoverageDays.toFixed(0)}j`}
                     </td>
                     <td className="p-2 text-right font-mono">{r.volatility.toFixed(2)}</td>
                     <td className="p-2 text-center">{r.isSeasonal ? "Oui" : "Non"}</td>

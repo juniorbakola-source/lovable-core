@@ -50,6 +50,8 @@ export interface InventoryResult {
 }
 
 type SkuRow = Database["public"]["Tables"]["skus"]["Row"];
+const MILLISECONDS_PER_DAY = 86_400_000;
+export const INFINITE_COVERAGE_DAYS = 9999;
 
 const Z_TABLE: Record<string, number> = {
   "0.8": 0.842,
@@ -174,7 +176,7 @@ export function calculateDynamicInventory(
     annualHistory > 0 && Math.abs(annualRecent - annualHistory) / Math.max(annualHistory, 1) > 0.2;
 
   const createdAt = parseSkuDate(sku.createdAt);
-  const ageDays = createdAt ? (Date.now() - createdAt.getTime()) / 86_400_000 : null;
+  const ageDays = createdAt ? (Date.now() - createdAt.getTime()) / MILLISECONDS_PER_DAY : null;
   const isImmature = ageDays !== null && ageDays >= 0 && ageDays < 365;
 
   const safetyMultiplier = 1 + Math.max(0, volatility - config.volatilityThreshold);
@@ -202,7 +204,8 @@ export function calculateDynamicInventory(
   const maxQuantity = Math.max(reorderPoint + eoq, reorderPoint);
 
   const effectiveStock = Math.max(0, sku.stock + sku.onOrder + sku.inProduction);
-  const currentCoverageDays = dailyDemand > 0 ? effectiveStock / dailyDemand : 9999;
+  const currentCoverageDays =
+    dailyDemand > 0 ? effectiveStock / dailyDemand : INFINITE_COVERAGE_DAYS;
 
   const moq = Math.max(safeNum(sku.moq, 0), 0);
   const shortage = Math.max(0, reorderPoint - effectiveStock);
