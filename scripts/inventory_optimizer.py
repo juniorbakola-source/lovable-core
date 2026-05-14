@@ -2,7 +2,7 @@
 =============================================================================
   INVENTORY OPTIMIZER — EOQ / Min / Max Engine
   Author  : Supply Chain Analytics Script
-  Version : 1.0.0
+  Version : 1.1.0
   Python  : 3.9+
 =============================================================================
 
@@ -10,37 +10,43 @@ METHODOLOGY
 -----------
 1. DEMAND ANALYSIS
    - Annualised demand  D  = historical 1-year consumption
-   - Monthly demand     Dm = 3-month consumption / 3
-   - Daily demand       d  = D / 365
-   - Seasonality flag       when |Dm*12 - D| / D > threshold
+   - Recent demand          = 3-month forecast/consumption × 4
+   - Monthly demand     Dm = annualised demand / 12
+   - Daily demand       d  = D / business_days_per_year [default 260]
+   - Seasonality flag       when |recent annualised - yearly| / yearly > threshold
 
 2. ECONOMIC ORDER QUANTITY (EOQ) — Wilson / Harris model
    EOQ = sqrt( 2 * D * S / H )
      S  = ordering cost per order   [configurable, default 50 CAD]
-     H  = holding cost per unit/yr  = holding_rate × last_cost
+     H  = holding cost per unit/yr  = holding_rate × unit cost
                                       [holding_rate default 25%]
 
 3. SAFETY STOCK
-   SS = Z × σ_demand × sqrt(lead_time_days)
+   SS = Z × σ_demand × sqrt(lead_time_business_days)
      Z          = service-level z-score   [default 1.65 → 95%]
      σ_demand   = std dev of daily demand (estimated from 3m vs 12m spread)
-     lead_time  = configurable per SKU or global default [default 14 days]
+     lead_time  = per-SKU lead_time_days when available, otherwise global default
 
 4. REORDER POINT (= MIN)
-   ROP = (d × lead_time_days) + SS
+   ROP = (d × lead_time_business_days) + SS
 
 5. MAX
    MAX = ROP + EOQ
 
 6. EFFECTIVE AVAILABLE STOCK
-   Effective = available + pipeline + in_production
+   Effective = available + pipeline/on_order + in_production
    → used to detect live shortage / overstock vs computed thresholds
 
 INPUTS (CSV columns, case-insensitive, whitespace-tolerant)
 -----------------------------------------------------------
+Supported canonical columns:
   sku, stock, reserved, available, pipeline, in_production,
-  sku_create_date, last_cost,
+  sku_create_date, last_cost, lead_time_days,
   historical_3m_consumption, historical_1y_consumption
+
+Supported Supabase/export aliases:
+  sku_code, reserve, disponible, on_order, Created_at, unit_cost,
+  forecast_3m, demand_history_yearly
 
 OUTPUTS
 -------
@@ -50,11 +56,11 @@ OUTPUTS
 
 USAGE
 -----
-  python inventory_optimizer.py                          # uses sample data
-  python inventory_optimizer.py --input data.csv
-  python inventory_optimizer.py --input data.csv \
+  python scripts/inventory_optimizer.py
+  python scripts/inventory_optimizer.py --input data.csv
+  python scripts/inventory_optimizer.py --input data.csv \
         --ordering-cost 75 --holding-rate 0.28 \
-        --lead-time 21    --service-level 0.97 \
+        --lead-time 21 --service-level 0.97 \
         --output-dir ./results
 """
 
@@ -64,12 +70,13 @@ import argparse
 import csv
 import io
 import math
+import re
 import sys
 import textwrap
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -83,7 +90,12 @@ class Config:
     ordering_cost: float = 50.0
     holding_rate: float = 0.25
     min_holding_cost: float = 0.10
+
+    # Business-day planning assumptions: Monday-Friday, excluding weekends.
     lead_time_days: int = 14
+    business_days_per_year: int = 260
+    working_days_per_month: float = 260 / 12
+
     service_level: float = 0.95
     _Z_TABLE: dict = field(default_factory=lambda: {
         0.80: 0.842,
@@ -93,20 +105,143 @@ class Config:
         0.97: 1.881,
         0.99: 2.326,
     })
+
     eoq_min_qty: int = 1
     eoq_max_multiple: float = 12.0
     seasonality_threshold: float = 0.20
     maturity_days: int = 365
 
     def z_score(self) -> float:
-        table = self._Z_TABLE
-        nearest = min(table.keys(), key=lambda k: abs(k - self.service_level))
-        return table[nearest]
+        nearest = min(self._Z_TABLE.keys(), key=lambda k: abs(k - self.service_level))
+        return self._Z_TABLE[nearest]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. DATA MODEL
+# 2. DATA MODEL + ROBUST CSV NORMALISATION
 # ─────────────────────────────────────────────────────────────────────────────
+
+_COLUMN_ALIASES: Dict[str, List[str]] = {
+    "sku": ["sku", "sku_code", "item", "item_code", "part", "part_number", "code"],
+    "stock": ["stock", "qty_on_hand", "on_hand", "inventory", "quantity_on_hand"],
+    "reserved": ["reserved", "reserve", "qty_reserved", "allocated"],
+    "available": ["available", "disponible", "qty_available", "free_stock", "free"],
+    "pipeline": ["pipeline", "on_order", "on order", "open_po", "po_open", "ordered"],
+    "in_production": ["in_production", "inproduction", "in production", "production", "wip"],
+    "sku_create_date": [
+        "sku_create_date",
+        "sku create date",
+        "create_date",
+        "created",
+        "created_at",
+        "created at",
+        "creation_date",
+        "creation date",
+    ],
+    "last_cost": ["last_cost", "unit_cost", "unit cost", "cost", "last cost", "standard_cost"],
+    "hist_3m": [
+        "historical_3m_consumption",
+        "hist_3m",
+        "3m_consumption",
+        "historical 3months consumption",
+        "hist3m",
+        "forecast_3m",
+        "forecast 3m",
+        "demand_3m",
+        "demand 3m",
+    ],
+    "hist_1y": [
+        "historical_1y_consumption",
+        "hist_1y",
+        "1y_consumption",
+        "historical 1-year consumption",
+        "hist1y",
+        "demand_history_yearly",
+        "demand history yearly",
+        "yearly_demand",
+        "annual_demand",
+    ],
+    "lead_time_days": ["lead_time_days", "lead time days", "lead_time", "lead time", "lt_days"],
+}
+
+
+def normalise_key(value: str) -> str:
+    """Normalize headers so Supabase, Excel and CSV exports map consistently."""
+    return re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
+
+
+def parse_number(value: object, default: float = 0.0) -> float:
+    """Parse numeric values from common CSV/Excel formats."""
+    if value in (None, ""):
+        return default
+    text = str(value).strip().replace("\u00a0", "")
+    if not text:
+        return default
+
+    # Support French/Excel decimal commas when no decimal dot is present.
+    if "," in text and "." not in text:
+        text = text.replace(",", ".")
+    # Remove thousands separators after decimal-comma handling.
+    text = text.replace(",", "")
+
+    try:
+        return float(text)
+    except ValueError:
+        return default
+
+
+def parse_date_value(value: object) -> Optional[date]:
+    """Parse common date and datetime formats without marking invalid dates as recent."""
+    if value in (None, ""):
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    # Excel serial date support. Ignore 0/1-like values and unrealistic serials.
+    if re.fullmatch(r"\d+(\.\d+)?", text):
+        serial = float(text)
+        if serial > 10_000:
+            try:
+                return datetime.fromordinal(datetime(1899, 12, 30).toordinal() + int(serial)).date()
+            except (OverflowError, ValueError):
+                return None
+
+    # ISO-like datetimes from Supabase: 2007-06-12 00:00 or 2019-...447000
+    iso_candidate = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(iso_candidate).date()
+    except ValueError:
+        pass
+
+    for fmt in (
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d/%m/%Y",
+        "%m/%d/%Y",
+        "%d-%m-%Y",
+        "%m-%d-%Y",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d/%m/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+
+    return None
+
+
+def get_value(row: dict, canonical_key: str, default: object = None) -> object:
+    """Return a row value using canonical key aliases."""
+    aliases = {normalise_key(alias) for alias in _COLUMN_ALIASES.get(canonical_key, [canonical_key])}
+    for raw_key, value in row.items():
+        if normalise_key(raw_key) in aliases:
+            return value
+    return default
+
 
 @dataclass
 class SKURecord:
@@ -122,77 +257,30 @@ class SKURecord:
     last_cost: float
     hist_3m: float
     hist_1y: float
+    lead_time_days: Optional[int] = None
+    date_parse_warning: bool = False
 
     @classmethod
     def from_dict(cls, row: dict) -> "SKURecord":
-        def normalise_key(value: str) -> str:
-            return value.strip().lower().replace(" ", "_").replace("-", "_")
+        raw_date = get_value(row, "sku_create_date")
+        parsed_date = parse_date_value(raw_date)
+        date_parse_warning = raw_date not in (None, "") and parsed_date is None
 
-        def f(key: str, default: float = 0.0) -> float:
-            aliases = {
-                "in_production": ["in_production", "inproduction", "in production", "production"],
-                "hist_3m": [
-                    "historical_3m_consumption",
-                    "hist_3m",
-                    "3m_consumption",
-                    "historical 3months consumption",
-                    "hist3m",
-                ],
-                "hist_1y": [
-                    "historical_1y_consumption",
-                    "hist_1y",
-                    "1y_consumption",
-                    "historical 1-year consumption",
-                    "hist1y",
-                ],
-                "sku_create_date": ["sku_create_date", "create_date", "sku create date", "created"],
-            }
-            search_keys = [normalise_key(candidate) for candidate in aliases.get(key, [key])]
-            for k, v in row.items():
-                if normalise_key(k) in search_keys:
-                    try:
-                        return float(v) if v not in ("", None) else default
-                    except ValueError:
-                        return default
-            return default
-
-        def parse_date(row: dict) -> Optional[date]:
-            date_keys = {normalise_key(k) for k in ["sku_create_date", "sku create date", "create_date", "created"]}
-            for k, v in row.items():
-                if normalise_key(k) in date_keys and v not in ("", None):
-                    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"):
-                        try:
-                            return datetime.strptime(str(v).strip(), fmt).date()
-                        except ValueError:
-                            continue
-            return None
-
-        def simple(key: str, default: float = 0.0) -> float:
-            for k, v in row.items():
-                if normalise_key(k) == key:
-                    try:
-                        return float(v) if v not in ("", None) else default
-                    except ValueError:
-                        return default
-            return default
-
-        sku_val = ""
-        for k, v in row.items():
-            if normalise_key(k) == "sku":
-                sku_val = str(v).strip()
-                break
+        lead_time = parse_number(get_value(row, "lead_time_days"), default=0.0)
 
         return cls(
-            sku=sku_val,
-            stock=simple("stock"),
-            reserved=simple("reserved"),
-            available=simple("available"),
-            pipeline=simple("pipeline"),
-            in_production=f("in_production"),
-            sku_create_date=parse_date(row),
-            last_cost=simple("last_cost"),
-            hist_3m=f("hist_3m"),
-            hist_1y=f("hist_1y"),
+            sku=str(get_value(row, "sku", "")).strip(),
+            stock=parse_number(get_value(row, "stock")),
+            reserved=parse_number(get_value(row, "reserved")),
+            available=parse_number(get_value(row, "available")),
+            pipeline=parse_number(get_value(row, "pipeline")),
+            in_production=parse_number(get_value(row, "in_production")),
+            sku_create_date=parsed_date,
+            last_cost=parse_number(get_value(row, "last_cost")),
+            hist_3m=parse_number(get_value(row, "hist_3m")),
+            hist_1y=parse_number(get_value(row, "hist_1y")),
+            lead_time_days=int(round(lead_time)) if lead_time > 0 else None,
+            date_parse_warning=date_parse_warning,
         )
 
     def age_days(self) -> Optional[int]:
@@ -209,6 +297,7 @@ class SKUResult:
     annual_demand: float
     monthly_demand: float
     daily_demand: float
+    lead_time_days: int
     is_seasonal: bool
     is_immature: bool
     last_cost: float
@@ -235,10 +324,15 @@ class InventoryCalculator:
     def __init__(self, config: Config):
         self.cfg = config
 
+    def get_lead_time(self, rec: SKURecord) -> int:
+        return rec.lead_time_days or self.cfg.lead_time_days
+
     def estimate_demand(self, rec: SKURecord) -> Tuple[float, float, float, bool, bool]:
         cfg = self.cfg
         age = rec.age_days()
-        is_immature = age is not None and age < cfg.maturity_days
+
+        # Important fix: missing/unparseable dates are NOT treated as recent.
+        is_immature = age is not None and 0 <= age < cfg.maturity_days
 
         annual_from_3m = rec.hist_3m * 4.0
         annual_from_1y = rec.hist_1y
@@ -249,7 +343,7 @@ class InventoryCalculator:
             divergence = 0.0
         is_seasonal = divergence > cfg.seasonality_threshold
 
-        if is_immature and rec.hist_1y <= 0:
+        if is_immature and annual_from_1y <= 0:
             annual_demand = annual_from_3m
         elif is_seasonal:
             annual_demand = max(annual_from_3m, annual_from_1y)
@@ -260,7 +354,7 @@ class InventoryCalculator:
 
         annual_demand = max(annual_demand, 0.0)
         monthly_demand = annual_demand / 12.0
-        daily_demand = annual_demand / 365.0
+        daily_demand = annual_demand / cfg.business_days_per_year
 
         return annual_demand, monthly_demand, daily_demand, is_seasonal, is_immature
 
@@ -285,17 +379,17 @@ class InventoryCalculator:
         hist_3m: float,
         hist_1y: float,
         is_seasonal: bool,
+        lead_time_days: int,
     ) -> float:
         cfg = self.cfg
         Z = cfg.z_score()
-        LT = cfg.lead_time_days
 
         monthly_3m = hist_3m / 3.0 if hist_3m > 0 else 0.0
         monthly_1y = hist_1y / 12.0 if hist_1y > 0 else 0.0
 
         if monthly_3m > 0 and monthly_1y > 0:
             sigma_monthly = abs(monthly_3m - monthly_1y) / 2.0
-            sigma_daily = sigma_monthly / 30.0
+            sigma_daily = sigma_monthly / cfg.working_days_per_month
             sigma_daily = max(sigma_daily, 0.10 * daily_demand)
         elif daily_demand > 0:
             sigma_daily = 0.20 * daily_demand
@@ -303,15 +397,15 @@ class InventoryCalculator:
             return 0.0
 
         seasonal_multiplier = 1.25 if is_seasonal else 1.0
-        ss = Z * sigma_daily * math.sqrt(LT) * seasonal_multiplier
+        ss = Z * sigma_daily * math.sqrt(lead_time_days) * seasonal_multiplier
         return round(ss, 2)
 
     def analyse(self, rec: SKURecord) -> SKUResult:
-        cfg = self.cfg
         annual, monthly, daily, is_seasonal, is_immature = self.estimate_demand(rec)
+        lead_time_days = self.get_lead_time(rec)
         eoq, holding_cost, ordering_cost = self.compute_eoq(annual, rec.last_cost)
-        safety_stock = self.compute_safety_stock(daily, rec.hist_3m, rec.hist_1y, is_seasonal)
-        reorder_point = round(daily * cfg.lead_time_days + safety_stock, 2)
+        safety_stock = self.compute_safety_stock(daily, rec.hist_3m, rec.hist_1y, is_seasonal, lead_time_days)
+        reorder_point = round(daily * lead_time_days + safety_stock, 2)
         max_qty = round(reorder_point + eoq, 2)
 
         effective = rec.available + rec.pipeline + rec.in_production
@@ -337,6 +431,7 @@ class InventoryCalculator:
             annual_demand=round(annual, 2),
             monthly_demand=round(monthly, 2),
             daily_demand=round(daily, 4),
+            lead_time_days=lead_time_days,
             is_seasonal=is_seasonal,
             is_immature=is_immature,
             last_cost=rec.last_cost,
@@ -373,8 +468,10 @@ class InventoryCalculator:
             notes.append("⚠ Seasonal demand detected — review min/max quarterly")
         if is_immature:
             notes.append("⚠ SKU has < 1 year history — parameters will improve over time")
+        if rec.date_parse_warning:
+            notes.append("⚠ SKU create date could not be parsed — maturity not applied")
         if rec.last_cost == 0:
-            notes.append("⚠ last_cost = 0 — EOQ uses minimum holding cost floor")
+            notes.append("⚠ last_cost/unit_cost = 0 — EOQ uses minimum holding cost floor")
         if annual_demand == 0:
             return "NO ACTION — zero demand", 0.0, notes + ["ℹ No recorded consumption"]
 
@@ -382,8 +479,7 @@ class InventoryCalculator:
             order_qty = max(eoq, round(max_qty - effective, 2))
             return "🔴 ORDER NOW", order_qty, notes + [f"Stock below ROP by {shortage:.1f} units"]
         if effective <= rop:
-            order_qty = eoq
-            return "🟡 REORDER", order_qty, notes + ["Stock at or below reorder point"]
+            return "🟡 REORDER", eoq, notes + ["Stock at or below reorder point"]
         if overstock > 0:
             notes.append(f"Stock exceeds MAX by {overstock:.1f} units — consider pausing orders")
             return "🟢 OVERSTOCK — HOLD", 0.0, notes
@@ -395,24 +491,29 @@ class InventoryCalculator:
 # ─────────────────────────────────────────────────────────────────────────────
 
 SAMPLE_CSV = """\
-sku,stock,reserved,available,pipeline,in_production,sku_create_date,last_cost,historical_3m_consumption,historical_1y_consumption
-SKU-001,500,50,450,100,0,2021-03-15,12.50,300,1100
-SKU-002,80,10,70,0,0,2022-07-01,5.00,200,900
-SKU-003,20,5,15,0,0,2023-11-20,75.00,60,220
-SKU-004,1200,200,1000,0,0,2020-01-10,2.30,80,280
-SKU-005,0,0,0,50,30,2024-02-01,150.00,25,0
-SKU-006,350,30,320,0,0,2019-06-12,8.75,400,1900
-SKU-007,10,0,10,0,0,2023-05-05,0.00,15,55
+sku_code;category;unit_cost;Created_at;stock;reserve;disponible;on_order;in_production;lead_time_days;demand_history_yearly;forecast_3m
+08P08437;C;1.1252;2019-11-05 11:02:07.447000;754;6;748;0;0;23;49;16
+10.7X40;C;7.8689;1900-01-01 00:00;64;34;30;100;0;44;414;111
+16.2X52;B;7.5208;2007-06-12 00:00;180;90;90;175;0;44;1154;362
 """
+
+
+def detect_dialect(sample: str) -> csv.Dialect:
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        return csv.excel
 
 
 def load_csv(path: Optional[str]) -> List[SKURecord]:
     if path:
         with open(path, newline="", encoding="utf-8-sig") as fh:
-            reader = csv.DictReader(fh)
+            sample = fh.read(4096)
+            fh.seek(0)
+            reader = csv.DictReader(fh, dialect=detect_dialect(sample))
             return [SKURecord.from_dict(row) for row in reader]
 
-    reader = csv.DictReader(io.StringIO(SAMPLE_CSV))
+    reader = csv.DictReader(io.StringIO(SAMPLE_CSV), dialect=detect_dialect(SAMPLE_CSV))
     return [SKURecord.from_dict(row) for row in reader]
 
 
@@ -426,7 +527,8 @@ def write_csv(results: List[SKUResult], out_path: str) -> None:
         "order_qty",
         "annual_demand",
         "monthly_demand",
-        "daily_demand",
+        "daily_demand_business",
+        "lead_time_business_days",
         "is_seasonal",
         "is_immature",
         "last_cost",
@@ -437,7 +539,7 @@ def write_csv(results: List[SKUResult], out_path: str) -> None:
         "reorder_point",
         "max_qty",
         "effective_stock",
-        "coverage_days",
+        "coverage_business_days",
         "shortage",
         "overstock",
         "notes",
@@ -452,7 +554,8 @@ def write_csv(results: List[SKUResult], out_path: str) -> None:
                 "order_qty": r.order_qty,
                 "annual_demand": r.annual_demand,
                 "monthly_demand": r.monthly_demand,
-                "daily_demand": r.daily_demand,
+                "daily_demand_business": r.daily_demand,
+                "lead_time_business_days": r.lead_time_days,
                 "is_seasonal": r.is_seasonal,
                 "is_immature": r.is_immature,
                 "last_cost": r.last_cost,
@@ -463,7 +566,7 @@ def write_csv(results: List[SKUResult], out_path: str) -> None:
                 "reorder_point": r.reorder_point,
                 "max_qty": r.max_qty,
                 "effective_stock": r.effective_stock,
-                "coverage_days": r.coverage_days,
+                "coverage_business_days": r.coverage_days,
                 "shortage": r.shortage,
                 "overstock": r.overstock,
                 "notes": " | ".join(r.notes),
@@ -479,7 +582,8 @@ def write_summary(results: List[SKUResult], cfg: Config, out_path: str) -> None:
     lines.append(
         f"  Parameters: Ordering Cost=${cfg.ordering_cost:.2f} | "
         f"Holding Rate={cfg.holding_rate * 100:.0f}% | "
-        f"Lead Time={cfg.lead_time_days}d | "
+        f"Default Lead Time={cfg.lead_time_days} business days | "
+        f"Business Days/Year={cfg.business_days_per_year} | "
         f"Service Level={cfg.service_level * 100:.0f}%"
     )
     lines.append(sep)
@@ -512,8 +616,9 @@ def write_summary(results: List[SKUResult], cfg: Config, out_path: str) -> None:
             lines.append(f"  Action     : {r.action}")
             if r.order_qty > 0:
                 lines.append(f"  Order Qty  : {r.order_qty:,.0f} units  (EOQ={r.eoq:,.0f})")
-            lines.append(f"  Demand     : {r.annual_demand:,.0f}/yr  {r.monthly_demand:,.1f}/mo  {r.daily_demand:.2f}/day")
-            lines.append(f"  Stock Pos  : {r.effective_stock:,.0f} units  ({r.coverage_days:.0f} days coverage)")
+            lines.append(f"  Demand     : {r.annual_demand:,.0f}/yr  {r.monthly_demand:,.1f}/mo  {r.daily_demand:.2f}/business day")
+            lines.append(f"  Lead Time  : {r.lead_time_days} business days")
+            lines.append(f"  Stock Pos  : {r.effective_stock:,.0f} units  ({r.coverage_days:.0f} business days coverage)")
             lines.append(f"  MIN (ROP)  : {r.reorder_point:,.0f}   MAX: {r.max_qty:,.0f}   SS: {r.safety_stock:,.0f}")
             for note in r.notes:
                 lines.append(f"  Note       : {note}")
@@ -529,9 +634,9 @@ def write_summary(results: List[SKUResult], cfg: Config, out_path: str) -> None:
 def print_table(results: List[SKUResult]) -> None:
     """Print a compact aligned table to stdout."""
     header = (
-        f"{'SKU':<12} {'Action':<22} {'OrdQty':>7} {'EOQ':>6} "
-        f"{'Min':>7} {'Max':>7} {'EffStk':>7} {'Cov_d':>6} "
-        f"{'Demand/y':>9}"
+        f"{'SKU':<14} {'Action':<22} {'OrdQty':>7} {'EOQ':>6} "
+        f"{'Min':>7} {'Max':>7} {'SS':>6} {'EffStk':>7} "
+        f"{'Cov_bd':>7} {'LT_bd':>6} {'Demand/y':>9}"
     )
     sep = "-" * len(header)
     print("\n" + sep)
@@ -540,9 +645,10 @@ def print_table(results: List[SKUResult]) -> None:
     for r in results:
         action_short = r.action.replace("🔴 ", "").replace("🟡 ", "").replace("🟢 ", "")
         print(
-            f"{r.sku:<12} {action_short:<22} {r.order_qty:>7.0f} {r.eoq:>6.0f} "
-            f"{r.reorder_point:>7.0f} {r.max_qty:>7.0f} {r.effective_stock:>7.0f} "
-            f"{r.coverage_days:>6.0f} {r.annual_demand:>9.0f}"
+            f"{r.sku:<14} {action_short:<22} {r.order_qty:>7.0f} {r.eoq:>6.0f} "
+            f"{r.reorder_point:>7.0f} {r.max_qty:>7.0f} {r.safety_stock:>6.0f} "
+            f"{r.effective_stock:>7.0f} {r.coverage_days:>7.0f} {r.lead_time_days:>6} "
+            f"{r.annual_demand:>9.0f}"
         )
     print(sep + "\n")
 
@@ -566,7 +672,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default=".", help="Directory for output files (default: current dir)")
     parser.add_argument("--ordering-cost", type=float, default=50.0, help="Cost per order placed ($, default 50)")
     parser.add_argument("--holding-rate", type=float, default=0.25, help="Annual holding rate 0-1 (default 0.25 = 25%%)")
-    parser.add_argument("--lead-time", type=int, default=14, help="Lead time in days (default 14)")
+    parser.add_argument("--lead-time", type=int, default=14, help="Default lead time in business days when SKU has no value")
+    parser.add_argument("--business-days-per-year", type=int, default=260, help="Working days per year, Monday-Friday default 260")
     parser.add_argument("--service-level", type=float, default=0.95, help="Service level 0-1 (default 0.95 = 95%%)")
     parser.add_argument("--no-csv", action="store_true", help="Skip writing output CSV")
     parser.add_argument("--no-summary", action="store_true", help="Skip writing summary TXT")
@@ -580,17 +687,20 @@ def main() -> None:
         ordering_cost=args.ordering_cost,
         holding_rate=args.holding_rate,
         lead_time_days=args.lead_time,
+        business_days_per_year=args.business_days_per_year,
+        working_days_per_month=args.business_days_per_year / 12,
         service_level=args.service_level,
     )
 
     print(f"\n{'=' * 60}")
     print("  INVENTORY OPTIMIZER")
     print(f"{'=' * 60}")
-    print(f"  Input          : {args.input or '(built-in sample data)'}")
-    print(f"  Ordering Cost  : ${cfg.ordering_cost:.2f}")
-    print(f"  Holding Rate   : {cfg.holding_rate * 100:.0f}%")
-    print(f"  Lead Time      : {cfg.lead_time_days} days")
-    print(f"  Service Level  : {cfg.service_level * 100:.0f}%  (Z={cfg.z_score()})")
+    print(f"  Input                : {args.input or '(built-in sample data)'}")
+    print(f"  Ordering Cost        : ${cfg.ordering_cost:.2f}")
+    print(f"  Holding Rate         : {cfg.holding_rate * 100:.0f}%")
+    print(f"  Default Lead Time    : {cfg.lead_time_days} business days")
+    print(f"  Business Days/Year   : {cfg.business_days_per_year}")
+    print(f"  Service Level        : {cfg.service_level * 100:.0f}%  (Z={cfg.z_score()})")
     print(f"{'=' * 60}\n")
 
     records = load_csv(args.input)
