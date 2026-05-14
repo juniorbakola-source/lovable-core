@@ -36,6 +36,7 @@ type MenuItem = {
     | "/dashboard/connectors"
     | "/dashboard/forecasting"
     | "/dashboard/solver"
+    | "/dashboard/optimizer"
     | "/dashboard/whatif"
     | "/dashboard/pos"
     | "/dashboard/settings"
