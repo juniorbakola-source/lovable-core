@@ -37,6 +37,7 @@ type MenuItem = {
     | "/dashboard/forecasting"
     | "/dashboard/solver"
     | "/dashboard/optimizer"
+    | "/dashboard/hybrid"
     | "/dashboard/whatif"
     | "/dashboard/pos"
     | "/dashboard/settings"
@@ -54,6 +55,7 @@ const MENU: MenuItem[] = [
   { to: "/dashboard/forecasting", labelKey: "nav.forecasting", icon: TrendingUp },
   { to: "/dashboard/solver", labelKey: "nav.solver", icon: Cpu },
   { to: "/dashboard/optimizer", labelKey: "nav.optimizer", icon: Boxes },
+  { to: "/dashboard/hybrid", labelKey: "nav.hybrid", icon: Boxes },
   { to: "/dashboard/whatif", labelKey: "nav.whatif", icon: Sliders },
   { to: "/dashboard/pos", labelKey: "nav.pos", icon: FileText },
   { to: "/dashboard/methodologie", labelKey: "nav.methodology", icon: BookOpen },
