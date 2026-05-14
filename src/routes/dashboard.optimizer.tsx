@@ -506,7 +506,10 @@ function OptimizerPage() {
                 fill="var(--destructive)"
                 radius={[6, 6, 0, 0]}
                 cursor="pointer"
-                onClick={(d: { sku?: string }) => d?.sku && focusSku(d.sku)}
+                onClick={(d) => {
+                  const payload = (d as { payload?: { sku?: string } })?.payload;
+                  if (payload?.sku) focusSku(payload.sku);
+                }}
               />
             </BarChart>
           </ResponsiveContainer>
