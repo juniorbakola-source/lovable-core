@@ -22,6 +22,7 @@ import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settin
 import { Route as DashboardPosRouteImport } from './routes/dashboard.pos'
 import { Route as DashboardOptimizerRouteImport } from './routes/dashboard.optimizer'
 import { Route as DashboardMethodologieRouteImport } from './routes/dashboard.methodologie'
+import { Route as DashboardHybridRouteImport } from './routes/dashboard.hybrid'
 import { Route as DashboardForecastingRouteImport } from './routes/dashboard.forecasting'
 import { Route as DashboardConnectorsRouteImport } from './routes/dashboard.connectors'
 
@@ -90,6 +91,11 @@ const DashboardMethodologieRoute = DashboardMethodologieRouteImport.update({
   path: '/methodologie',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardHybridRoute = DashboardHybridRouteImport.update({
+  id: '/hybrid',
+  path: '/hybrid',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardForecastingRoute = DashboardForecastingRouteImport.update({
   id: '/forecasting',
   path: '/forecasting',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
+  '/dashboard/hybrid': typeof DashboardHybridRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
   '/dashboard/optimizer': typeof DashboardOptimizerRoute
   '/dashboard/pos': typeof DashboardPosRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
+  '/dashboard/hybrid': typeof DashboardHybridRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
   '/dashboard/optimizer': typeof DashboardOptimizerRoute
   '/dashboard/pos': typeof DashboardPosRoute
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
+  '/dashboard/hybrid': typeof DashboardHybridRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
   '/dashboard/optimizer': typeof DashboardOptimizerRoute
   '/dashboard/pos': typeof DashboardPosRoute
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard/connectors'
     | '/dashboard/forecasting'
+    | '/dashboard/hybrid'
     | '/dashboard/methodologie'
     | '/dashboard/optimizer'
     | '/dashboard/pos'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard/connectors'
     | '/dashboard/forecasting'
+    | '/dashboard/hybrid'
     | '/dashboard/methodologie'
     | '/dashboard/optimizer'
     | '/dashboard/pos'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard/connectors'
     | '/dashboard/forecasting'
+    | '/dashboard/hybrid'
     | '/dashboard/methodologie'
     | '/dashboard/optimizer'
     | '/dashboard/pos'
@@ -305,6 +317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardMethodologieRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/hybrid': {
+      id: '/dashboard/hybrid'
+      path: '/hybrid'
+      fullPath: '/dashboard/hybrid'
+      preLoaderRoute: typeof DashboardHybridRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/forecasting': {
       id: '/dashboard/forecasting'
       path: '/forecasting'
@@ -325,6 +344,7 @@ declare module '@tanstack/react-router' {
 interface DashboardRouteChildren {
   DashboardConnectorsRoute: typeof DashboardConnectorsRoute
   DashboardForecastingRoute: typeof DashboardForecastingRoute
+  DashboardHybridRoute: typeof DashboardHybridRoute
   DashboardMethodologieRoute: typeof DashboardMethodologieRoute
   DashboardOptimizerRoute: typeof DashboardOptimizerRoute
   DashboardPosRoute: typeof DashboardPosRoute
@@ -339,6 +359,7 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardConnectorsRoute: DashboardConnectorsRoute,
   DashboardForecastingRoute: DashboardForecastingRoute,
+  DashboardHybridRoute: DashboardHybridRoute,
   DashboardMethodologieRoute: DashboardMethodologieRoute,
   DashboardOptimizerRoute: DashboardOptimizerRoute,
   DashboardPosRoute: DashboardPosRoute,

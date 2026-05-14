@@ -33,6 +33,7 @@ const T: Record<LangCode, Record<string, string>> = {
     "nav.forecasting": "Séries Temporelles IA",
     "nav.solver": "Solveur Engine",
     "nav.optimizer": "Inventory Optimizer",
+    "nav.hybrid": "Analyse Hybride",
     "nav.whatif": "Analyse What-If",
     "nav.pos": "Bons de Commande",
     "nav.methodology": "Méthodologie & Formules",
@@ -59,6 +60,7 @@ const T: Record<LangCode, Record<string, string>> = {
     "nav.forecasting": "AI Time Series",
     "nav.solver": "Solver Engine",
     "nav.optimizer": "Inventory Optimizer",
+    "nav.hybrid": "Hybrid Analysis",
     "nav.whatif": "What-If Analysis",
     "nav.pos": "Purchase Orders",
     "nav.methodology": "Methodology & Formulas",
@@ -85,6 +87,7 @@ const T: Record<LangCode, Record<string, string>> = {
     "nav.forecasting": "Series Temporales IA",
     "nav.solver": "Motor Solvente",
     "nav.optimizer": "Optimizador de Inventario",
+    "nav.hybrid": "Análisis Híbrido",
     "nav.whatif": "Análisis What-If",
     "nav.pos": "Órdenes de Compra",
     "nav.methodology": "Metodología y Fórmulas",
@@ -111,6 +114,7 @@ const T: Record<LangCode, Record<string, string>> = {
     "nav.forecasting": "السلاسل الزمنية",
     "nav.solver": "محرك الحل",
     "nav.optimizer": "محسن المخزون",
+    "nav.hybrid": "تحليل هجين",
     "nav.whatif": "تحليل ماذا لو",
     "nav.pos": "أوامر الشراء",
     "nav.methodology": "المنهجية والصيغ",
@@ -209,7 +213,10 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   function fc(value: number, opts?: { decimals?: number }): string {
     const d = opts?.decimals ?? 0;
-    const formatted = value.toLocaleString(langDef.locale, { maximumFractionDigits: d, minimumFractionDigits: 0 });
+    const formatted = value.toLocaleString(langDef.locale, {
+      maximumFractionDigits: d,
+      minimumFractionDigits: 0,
+    });
     // Place symbol before or after depending on currency convention
     if (currency === "EUR" || currency === "MAD" || currency === "XOF" || currency === "CHF") {
       return `${formatted} ${currDef.symbol}`;
@@ -219,7 +226,10 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   function fn(value: number, opts?: { decimals?: number }): string {
     const d = opts?.decimals ?? 0;
-    return value.toLocaleString(langDef.locale, { maximumFractionDigits: d, minimumFractionDigits: 0 });
+    return value.toLocaleString(langDef.locale, {
+      maximumFractionDigits: d,
+      minimumFractionDigits: 0,
+    });
   }
 
   if (!hydrated) return null;
