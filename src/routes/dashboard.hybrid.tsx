@@ -240,9 +240,9 @@ function HybridInventoryPage() {
             )}
             Lancer l’analyse
           </Button>
-          <Button variant="outline" onClick={runAnalysis} disabled={running}>
+          <Button variant="outline" onClick={() => setCfg(DEFAULT_CONFIG)} disabled={running}>
             <RefreshCw className="h-4 w-4 mr-2" />
-            Recalcul hebdomadaire
+            Réinitialiser paramètres
           </Button>
           <Button variant="outline" onClick={exportCsv}>
             <Download className="h-4 w-4 mr-2" />
