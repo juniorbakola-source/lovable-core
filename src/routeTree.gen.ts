@@ -20,6 +20,7 @@ import { Route as DashboardSkusRouteImport } from './routes/dashboard.skus'
 import { Route as DashboardSilveryRouteImport } from './routes/dashboard.silvery'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardPosRouteImport } from './routes/dashboard.pos'
+import { Route as DashboardOptimizerRouteImport } from './routes/dashboard.optimizer'
 import { Route as DashboardMethodologieRouteImport } from './routes/dashboard.methodologie'
 import { Route as DashboardForecastingRouteImport } from './routes/dashboard.forecasting'
 import { Route as DashboardConnectorsRouteImport } from './routes/dashboard.connectors'
@@ -79,6 +80,11 @@ const DashboardPosRoute = DashboardPosRouteImport.update({
   path: '/pos',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardOptimizerRoute = DashboardOptimizerRouteImport.update({
+  id: '/optimizer',
+  path: '/optimizer',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardMethodologieRoute = DashboardMethodologieRouteImport.update({
   id: '/methodologie',
   path: '/methodologie',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
+  '/dashboard/optimizer': typeof DashboardOptimizerRoute
   '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/silvery': typeof DashboardSilveryRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
+  '/dashboard/optimizer': typeof DashboardOptimizerRoute
   '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/silvery': typeof DashboardSilveryRoute
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/dashboard/connectors': typeof DashboardConnectorsRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/methodologie': typeof DashboardMethodologieRoute
+  '/dashboard/optimizer': typeof DashboardOptimizerRoute
   '/dashboard/pos': typeof DashboardPosRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/silvery': typeof DashboardSilveryRoute
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/dashboard/connectors'
     | '/dashboard/forecasting'
     | '/dashboard/methodologie'
+    | '/dashboard/optimizer'
     | '/dashboard/pos'
     | '/dashboard/settings'
     | '/dashboard/silvery'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/dashboard/connectors'
     | '/dashboard/forecasting'
     | '/dashboard/methodologie'
+    | '/dashboard/optimizer'
     | '/dashboard/pos'
     | '/dashboard/settings'
     | '/dashboard/silvery'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/dashboard/connectors'
     | '/dashboard/forecasting'
     | '/dashboard/methodologie'
+    | '/dashboard/optimizer'
     | '/dashboard/pos'
     | '/dashboard/settings'
     | '/dashboard/silvery'
@@ -279,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardPosRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/optimizer': {
+      id: '/dashboard/optimizer'
+      path: '/optimizer'
+      fullPath: '/dashboard/optimizer'
+      preLoaderRoute: typeof DashboardOptimizerRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/methodologie': {
       id: '/dashboard/methodologie'
       path: '/methodologie'
@@ -307,6 +326,7 @@ interface DashboardRouteChildren {
   DashboardConnectorsRoute: typeof DashboardConnectorsRoute
   DashboardForecastingRoute: typeof DashboardForecastingRoute
   DashboardMethodologieRoute: typeof DashboardMethodologieRoute
+  DashboardOptimizerRoute: typeof DashboardOptimizerRoute
   DashboardPosRoute: typeof DashboardPosRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardSilveryRoute: typeof DashboardSilveryRoute
@@ -320,6 +340,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardConnectorsRoute: DashboardConnectorsRoute,
   DashboardForecastingRoute: DashboardForecastingRoute,
   DashboardMethodologieRoute: DashboardMethodologieRoute,
+  DashboardOptimizerRoute: DashboardOptimizerRoute,
   DashboardPosRoute: DashboardPosRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardSilveryRoute: DashboardSilveryRoute,
