@@ -49,7 +49,21 @@ import {
 } from "recharts";
 import type { Database } from "@/integrations/supabase/types";
 
-type Sku = Database["public"]["Tables"]["skus"]["Row"];
+type Sku = Pick<
+  Database["public"]["Tables"]["skus"]["Row"],
+  | "id"
+  | "sku_code"
+  | "name"
+  | "stock"
+  | "on_order"
+  | "in_production"
+  | "lead_time_days"
+  | "unit_cost"
+  | "demand_history"
+  | "demand_history_yearly"
+  | "forecast_3m"
+  | "created_at"
+>;
 
 export const Route = createFileRoute("/dashboard/optimizer")({
   head: () => ({ meta: [{ title: "Analyse Hybride — FlowStock" }] }),
@@ -373,7 +387,13 @@ function OptimizerPage() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase.from("skus").select("*").eq("user_id", user.id);
+      const { data, error } = await supabase
+        .from("skus")
+        .select(
+          "id,sku_code,name,stock,on_order,in_production,lead_time_days,unit_cost,demand_history,demand_history_yearly,forecast_3m,created_at",
+        )
+        .eq("user_id", user.id)
+        .limit(5000);
 
       if (error) {
         toast.error("Erreur de chargement des SKUs");
@@ -398,12 +418,10 @@ function OptimizerPage() {
 
       const activeCfg = nextCfg ?? cfg;
       setRunning(true);
-      setTimeout(() => {
-        const out = skus.map((sku) => analyse(sku, activeCfg));
-        setResults(out);
-        setRunning(false);
-        toast.success(`${out.length} SKUs analysés`);
-      }, 50);
+      const out = skus.map((sku) => analyse(sku, activeCfg));
+      setResults(out);
+      setRunning(false);
+      toast.success(`${out.length} SKUs analysés`);
     },
     [cfg, skus],
   );
