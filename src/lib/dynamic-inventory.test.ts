@@ -56,7 +56,11 @@ describe("dynamic inventory engine", () => {
     expect(result.annualDemand).toBeGreaterThan(0);
     expect(result.coverageTargetDays).toBeGreaterThan(0);
     expect(result.reorderPoint).toBeGreaterThanOrEqual(0);
-    expect(result.maxQuantity).toBeGreaterThanOrEqual(result.reorderPoint);
+    expect(result.maxQty).toBeGreaterThanOrEqual(result.reorderPoint);
+    expect(result.availableStock).toBeGreaterThanOrEqual(0);
+    expect(result.effectiveStock).toBeGreaterThanOrEqual(result.availableStock);
+    expect(result.action.length).toBeGreaterThan(0);
+    expect(Array.isArray(result.recommendations)).toBe(true);
     expect(result.recommendation.length).toBeGreaterThan(0);
   });
 
@@ -69,5 +73,12 @@ describe("dynamic inventory engine", () => {
     expect(results).toHaveLength(2);
     expect(results[0].skuCode).toBe("SKU-1");
     expect(results[1].skuCode).toBe("SKU-2");
+  });
+
+  it("accounts for reserved stock in effective stock", () => {
+    const sku = toInventorySku(makeSkuRow({ stock: 20, on_order: 10, in_production: 5 }));
+    const result = calculateDynamicInventory({ ...sku, reserved: 8 }, DEFAULT_CONFIG);
+    expect(result.availableStock).toBe(12);
+    expect(result.effectiveStock).toBe(27);
   });
 });
