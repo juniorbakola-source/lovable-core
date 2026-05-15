@@ -3,9 +3,9 @@ import type { Database } from "@/integrations/supabase/types";
 export interface InventoryConfig {
   orderingCost: number;
   holdingRate: number;
-  leadTimeDays: number;
   serviceLevel: number;
-  businessDaysPerYear: number;
+  leadTimeDays: number;
+  businessDaysYear: number;
   forecastWeight: number;
   historyWeight: number;
   volatilityThreshold: number;
@@ -17,13 +17,14 @@ export interface InventorySku {
   skuCode: string;
   unitCost: number;
   stock: number;
+  reserved: number;
   onOrder: number;
   inProduction: number;
   leadTimeDays?: number | null;
   serviceLevel?: number | null;
   moq?: number | null;
   demandHistory: number[];
-  demandHistoryYearly: number[];
+  yearlyHistory: number[];
   forecast3m: number[];
   createdAt?: string | null;
 }
@@ -31,32 +32,39 @@ export interface InventorySku {
 export interface InventoryResult {
   skuId: string;
   skuCode: string;
-  annualHistory: number;
-  annualRecent: number;
   annualDemand: number;
   dailyDemand: number;
+  volatility: number;
   coverageTargetDays: number;
   safetyStock: number;
   reorderPoint: number;
-  maxQuantity: number;
+  maxQty: number;
+  eoq: number;
+  stock: number;
+  reserved: number;
+  onOrder: number;
+  inProduction: number;
+  availableStock: number;
   effectiveStock: number;
   currentCoverageDays: number;
-  volatility: number;
+  seasonal: boolean;
+  immature: boolean;
+  action: string;
+  recommendations: string[];
+  recommendedOrderQty: number;
+  recommendation: string;
   isSeasonal: boolean;
   isImmature: boolean;
   isVolatile: boolean;
-  recommendedOrderQty: number;
-  recommendation: string;
+  maxQuantity: number;
 }
 
 type SkuRow = Database["public"]["Tables"]["skus"]["Row"];
-const MILLISECONDS_PER_DAY = 86_400_000;
+
 export const INFINITE_COVERAGE_DAYS = 9999;
 
 const Z_TABLE: Record<string, number> = {
-  "0.8": 0.842,
-  "0.85": 1.036,
-  "0.9": 1.282,
+  "0.90": 1.282,
   "0.95": 1.645,
   "0.97": 1.881,
   "0.99": 2.326,
@@ -65,13 +73,13 @@ const Z_TABLE: Record<string, number> = {
 export const DEFAULT_CONFIG: InventoryConfig = {
   orderingCost: 50,
   holdingRate: 0.25,
-  leadTimeDays: 14,
   serviceLevel: 0.95,
-  businessDaysPerYear: 260,
-  forecastWeight: 0.6,
-  historyWeight: 0.4,
-  volatilityThreshold: 0.35,
-  reviewPeriodDays: 30,
+  leadTimeDays: 14,
+  businessDaysYear: 260,
+  forecastWeight: 0.5,
+  historyWeight: 0.5,
+  volatilityThreshold: 0.2,
+  reviewPeriodDays: 7,
 };
 
 const safeNum = (value: unknown, fallback = 0) => {
@@ -79,59 +87,212 @@ const safeNum = (value: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-const sum = (values: number[]) => values.reduce((acc, value) => acc + safeNum(value), 0);
+const sum = (values?: number[]) => (values ?? []).reduce((acc, value) => acc + safeNum(value), 0);
 
-const avg = (values: number[]) => (values.length > 0 ? sum(values) / values.length : 0);
-
-const stdDev = (values: number[]) => {
-  if (values.length <= 1) return 0;
-  const mean = avg(values);
-  const variance =
-    values.reduce((acc, value) => acc + (value - mean) ** 2, 0) / (values.length - 1);
-  return Math.sqrt(Math.max(variance, 0));
+const avg = (values?: number[]) => {
+  if (!values?.length) return 0;
+  return sum(values) / values.length;
 };
 
-function parseSkuDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const raw = value.trim();
-  if (!raw) return null;
-  const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) return null;
-  if (parsed.getFullYear() < 1900 || parsed.getTime() > Date.now()) return null;
-  return parsed;
-}
+const stddev = (values?: number[]) => {
+  if (!values?.length) return 0;
+  const mean = avg(values);
+  const variance =
+    values.reduce((acc, value) => acc + Math.pow(value - mean, 2), 0) / Math.max(values.length, 1);
+  return Math.sqrt(variance);
+};
 
-function zScore(serviceLevel: number): number {
+function zScore(serviceLevel: number) {
   const nearest = Object.keys(Z_TABLE).reduce((a, b) =>
-    Math.abs(parseFloat(b) - serviceLevel) < Math.abs(parseFloat(a) - serviceLevel) ? b : a,
+    Math.abs(Number(b) - serviceLevel) < Math.abs(Number(a) - serviceLevel) ? b : a,
   );
   return Z_TABLE[nearest];
 }
 
-function normalizeWeights(forecastWeight: number, historyWeight: number) {
-  const f = Math.max(forecastWeight, 0);
-  const h = Math.max(historyWeight, 0);
-  const total = f + h;
-  if (total <= 0) return { forecast: 0.5, history: 0.5 };
-  return { forecast: f / total, history: h / total };
+function summarizeActionAndRecommendations(
+  effectiveStock: number,
+  reorderPoint: number,
+  maxQty: number,
+  currentCoverageDays: number,
+  leadTimeDays: number,
+  reserved: number,
+  stock: number,
+  seasonal: boolean,
+  volatility: number,
+  immature: boolean,
+) {
+  const recommendations: string[] = [];
+
+  let action = "🟢 OK";
+  if (effectiveStock < reorderPoint) action = "🔴 ORDER NOW";
+  else if (effectiveStock > maxQty) action = "🟢 OVERSTOCK";
+
+  if (currentCoverageDays < leadTimeDays) recommendations.push("🔴 Risk of stockout");
+  if (effectiveStock > maxQty * 1.3) recommendations.push("⚠ Overstock risk");
+  if (reserved > stock * 0.5) recommendations.push("⚠ High reserved stock ratio");
+  if (reserved > stock) recommendations.push("🔴 Reserved exceeds stock");
+  if (seasonal) recommendations.push("📈 Seasonal demand");
+  if (volatility > 0.5) recommendations.push("⚠ High demand volatility");
+  if (immature) recommendations.push("⚠ Immature SKU");
+
+  const recommendation = recommendations.length > 0 ? recommendations.join(" · ") : "RAS";
+
+  return {
+    action,
+    recommendations,
+    recommendation,
+  };
 }
 
 export function toInventorySku(row: SkuRow): InventorySku {
+  const rowWithReserved = row as SkuRow & { reserved?: number | null };
+
   return {
     id: row.id,
     skuCode: row.sku_code ?? row.name ?? row.id.slice(0, 8),
     unitCost: safeNum(row.unit_cost),
     stock: safeNum(row.stock),
+    reserved: safeNum(rowWithReserved.reserved),
     onOrder: safeNum(row.on_order),
     inProduction: safeNum(row.in_production),
     leadTimeDays: row.lead_time_days,
     serviceLevel: row.service_level,
     moq: row.moq,
     demandHistory: (row.demand_history ?? []) as number[],
-    demandHistoryYearly: (row.demand_history_yearly ?? []) as number[],
+    yearlyHistory: (row.demand_history_yearly ?? []) as number[],
     forecast3m: (row.forecast_3m ?? []) as number[],
     createdAt: row.created_at,
+  };
+}
+
+export function calculateWeeklyInventory(
+  sku: InventorySku,
+  cfg: InventoryConfig = DEFAULT_CONFIG,
+): InventoryResult {
+  const history = sku.demandHistory ?? [];
+  const yearly = sku.yearlyHistory ?? [];
+  const forecast = sku.forecast3m ?? [];
+
+  const recentHistory3m = sum(history.slice(-3));
+  const recentForecast3m = sum(forecast.slice(-3));
+
+  const annualHistory = yearly.length > 0 ? sum(yearly) : sum(history.slice(-12));
+
+  const recentSignal = recentForecast3m * cfg.forecastWeight + recentHistory3m * cfg.historyWeight;
+  const annualRecent = recentSignal * 4;
+
+  const seasonalRatio =
+    annualHistory > 0 ? Math.abs(annualRecent - annualHistory) / Math.max(annualHistory, 1) : 0;
+  const seasonal = seasonalRatio > cfg.volatilityThreshold;
+
+  let immature = false;
+  if (sku.createdAt) {
+    const created = new Date(sku.createdAt);
+    if (!Number.isNaN(created.getTime())) {
+      const ageDays = (Date.now() - created.getTime()) / 86_400_000;
+      immature = ageDays < 365;
+    }
+  }
+
+  let annualDemand = 0;
+  if (immature && annualHistory <= 0) {
+    annualDemand = annualRecent;
+  } else if (seasonal) {
+    annualDemand = Math.max(annualRecent, annualHistory);
+  } else {
+    const recentWeight = immature ? 0.6 : 0.3;
+    annualDemand = recentWeight * annualRecent + (1 - recentWeight) * annualHistory;
+  }
+  annualDemand = Math.max(annualDemand, 0);
+
+  const businessDaysYear = Math.max(cfg.businessDaysYear, 1);
+  const leadTimeDays = Math.max(safeNum(sku.leadTimeDays, cfg.leadTimeDays), 0);
+  const serviceLevel = Math.min(Math.max(safeNum(sku.serviceLevel, cfg.serviceLevel), 0.9), 0.99);
+
+  const dailyDemand = annualDemand / businessDaysYear;
+
+  const monthlyHistory = history.slice(-12);
+  const monthlyAverage = avg(monthlyHistory);
+  const monthlyStdDev = stddev(monthlyHistory);
+  const volatility = monthlyAverage > 0 ? monthlyStdDev / monthlyAverage : 0;
+
+  let coverageTargetDays = 20;
+  if (volatility > 0.5) coverageTargetDays = 45;
+  else if (volatility > 0.25) coverageTargetDays = 30;
+  if (seasonal) coverageTargetDays += 10;
+  if (immature) coverageTargetDays += 10;
+
+  const sigmaDaily = monthlyStdDev / Math.max(businessDaysYear / 12, 1);
+  const safetyStock = zScore(serviceLevel) * sigmaDaily * Math.sqrt(leadTimeDays);
+
+  const reorderPoint = dailyDemand * leadTimeDays + safetyStock;
+
+  const holdingCost = Math.max(sku.unitCost * cfg.holdingRate, 0.1);
+  const rawEOQ =
+    annualDemand > 0
+      ? Math.sqrt((2 * annualDemand * cfg.orderingCost) / Math.max(holdingCost, 0.1))
+      : 0;
+  const eoq = Math.max(Math.round(rawEOQ), 1);
+
+  const stock = safeNum(sku.stock);
+  const reserved = safeNum(sku.reserved);
+  const availableStock = Math.max(stock - reserved, 0);
+  const onOrder = safeNum(sku.onOrder);
+  const inProduction = safeNum(sku.inProduction);
+  const effectiveStock = availableStock + onOrder + inProduction;
+
+  const replenishmentBuffer = dailyDemand * coverageTargetDays;
+  const maxQty = reorderPoint + replenishmentBuffer;
+
+  const currentCoverageDays =
+    dailyDemand > 0 ? effectiveStock / dailyDemand : INFINITE_COVERAGE_DAYS;
+
+  const summary = summarizeActionAndRecommendations(
+    effectiveStock,
+    reorderPoint,
+    maxQty,
+    currentCoverageDays,
+    leadTimeDays,
+    reserved,
+    stock,
+    seasonal,
+    volatility,
+    immature,
+  );
+
+  const recommendedOrderQty =
+    summary.action === "🔴 ORDER NOW"
+      ? Math.max(Math.round(Math.max(maxQty - effectiveStock, safeNum(sku.moq, 0))), 0)
+      : 0;
+
+  return {
+    skuId: sku.id,
+    skuCode: sku.skuCode,
+    annualDemand,
+    dailyDemand,
+    volatility,
+    coverageTargetDays,
+    safetyStock,
+    reorderPoint,
+    maxQty,
+    eoq,
+    stock,
+    reserved,
+    onOrder,
+    inProduction,
+    availableStock,
+    effectiveStock,
+    currentCoverageDays,
+    seasonal,
+    immature,
+    action: summary.action,
+    recommendations: summary.recommendations,
+    recommendedOrderQty,
+    recommendation: summary.recommendation,
+    isSeasonal: seasonal,
+    isImmature: immature,
+    isVolatile: volatility > 0.5,
+    maxQuantity: maxQty,
   };
 }
 
@@ -139,122 +300,19 @@ export function calculateDynamicInventory(
   sku: InventorySku,
   config: InventoryConfig = DEFAULT_CONFIG,
 ): InventoryResult {
-  const annualHistory =
-    sku.demandHistoryYearly.length > 0
-      ? sum(sku.demandHistoryYearly)
-      : sum(sku.demandHistory.slice(-12));
-  const annualRecent =
-    (sku.forecast3m.length > 0 ? sum(sku.forecast3m.slice(-3)) : sum(sku.demandHistory.slice(-3))) *
-    4;
-  const weights = normalizeWeights(config.forecastWeight, config.historyWeight);
+  return calculateWeeklyInventory(sku, config);
+}
 
-  let annualDemand = annualRecent * weights.forecast + annualHistory * weights.history;
-  if (annualHistory <= 0 && annualRecent > 0) annualDemand = annualRecent;
-  if (annualRecent <= 0 && annualHistory > 0) annualDemand = annualHistory;
-  annualDemand = Math.max(annualDemand, 0);
-
-  const businessDaysPerYear = Math.max(config.businessDaysPerYear, 1);
-  const dailyDemand = annualDemand / businessDaysPerYear;
-
-  const leadTimeDays = Math.max(safeNum(sku.leadTimeDays, config.leadTimeDays), 0);
-  const serviceLevel = Math.min(
-    Math.max(safeNum(sku.serviceLevel, config.serviceLevel), 0.8),
-    0.99,
-  );
-  const z = zScore(serviceLevel);
-
-  const monthlySeries =
-    sku.demandHistoryYearly.length > 0 ? sku.demandHistoryYearly : sku.demandHistory.slice(-12);
-  const meanMonthly = avg(monthlySeries);
-  const sigmaMonthly = stdDev(monthlySeries);
-  const volatility = meanMonthly > 0 ? sigmaMonthly / meanMonthly : 0;
-  const isVolatile = volatility >= config.volatilityThreshold;
-  const monthlyToDailyDivisor = Math.max(businessDaysPerYear / 12, 1);
-  const sigmaDaily = Math.max(sigmaMonthly / monthlyToDailyDivisor, dailyDemand * 0.1);
-
-  const isSeasonal =
-    annualHistory > 0 && Math.abs(annualRecent - annualHistory) / Math.max(annualHistory, 1) > 0.2;
-
-  const createdAt = parseSkuDate(sku.createdAt);
-  const ageDays = createdAt ? (Date.now() - createdAt.getTime()) / MILLISECONDS_PER_DAY : null;
-  const isImmature = ageDays !== null && ageDays >= 0 && ageDays < 365;
-
-  const safetyMultiplier = 1 + Math.max(0, volatility - config.volatilityThreshold);
-  const seasonalityMultiplier = isSeasonal ? 1.1 : 1;
-  const safetyStock = Math.max(
-    0,
-    Math.round(
-      z *
-        sigmaDaily *
-        Math.sqrt(Math.max(leadTimeDays, 1)) *
-        safetyMultiplier *
-        seasonalityMultiplier,
-    ),
-  );
-  const reorderPoint = Math.max(0, Math.round(dailyDemand * leadTimeDays + safetyStock));
-  const coverageTargetDays = Math.max(config.reviewPeriodDays + leadTimeDays, leadTimeDays);
-
-  const holdingCost = Math.max(config.holdingRate * Math.max(sku.unitCost, 0), 0.1);
-  const eoqRaw =
-    annualDemand > 0 && config.orderingCost > 0
-      ? Math.sqrt((2 * annualDemand * config.orderingCost) / holdingCost)
-      : 0;
-  const baseCycle = Math.max(Math.round(dailyDemand * coverageTargetDays), 0);
-  const eoq = Math.max(Math.round(eoqRaw), baseCycle);
-  const maxQuantity = Math.max(reorderPoint + eoq, reorderPoint);
-
-  const effectiveStock = Math.max(0, sku.stock + sku.onOrder + sku.inProduction);
-  const currentCoverageDays =
-    dailyDemand > 0 ? effectiveStock / dailyDemand : INFINITE_COVERAGE_DAYS;
-
-  const moq = Math.max(safeNum(sku.moq, 0), 0);
-  const shortage = Math.max(0, reorderPoint - effectiveStock);
-  const isOverstock = effectiveStock > maxQuantity;
-
-  let recommendation = "OK";
-  let recommendedOrderQty = 0;
-
-  if (annualDemand <= 0) {
-    recommendation = "Aucune demande détectée";
-  } else if (shortage > 0) {
-    recommendation = "Commander immédiatement";
-    recommendedOrderQty = Math.max(maxQuantity - effectiveStock, moq, shortage);
-  } else if (effectiveStock <= reorderPoint) {
-    recommendation = "Réapprovisionner";
-    recommendedOrderQty = Math.max(eoq, moq);
-  } else if (isOverstock) {
-    recommendation = "Surstock à réduire";
-  }
-
-  if (isImmature) recommendation = `${recommendation} · SKU immature`;
-  if (isVolatile) recommendation = `${recommendation} · Volatilité élevée`;
-  if (isSeasonal) recommendation = `${recommendation} · Saisonnalité`;
-
-  return {
-    skuId: sku.id,
-    skuCode: sku.skuCode,
-    annualHistory,
-    annualRecent,
-    annualDemand,
-    dailyDemand,
-    coverageTargetDays,
-    safetyStock,
-    reorderPoint,
-    maxQuantity,
-    effectiveStock,
-    currentCoverageDays,
-    volatility,
-    isSeasonal,
-    isImmature,
-    isVolatile,
-    recommendedOrderQty,
-    recommendation,
-  };
+export function runWeeklyRecalculation(
+  skus: InventorySku[],
+  cfg: InventoryConfig = DEFAULT_CONFIG,
+): InventoryResult[] {
+  return skus.map((sku) => calculateWeeklyInventory(sku, cfg));
 }
 
 export function weeklyRecalculation(
   skus: InventorySku[],
   config: InventoryConfig = DEFAULT_CONFIG,
 ): InventoryResult[] {
-  return skus.map((sku) => calculateDynamicInventory(sku, config));
+  return runWeeklyRecalculation(skus, config);
 }

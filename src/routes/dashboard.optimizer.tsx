@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -66,7 +67,7 @@ type Sku = Pick<
 >;
 
 export const Route = createFileRoute("/dashboard/optimizer")({
-  head: () => ({ meta: [{ title: "Analyse Hybride — FlowStock" }] }),
+  head: () => ({ meta: [{ title: "Inventory Optimizer — FlowStock" }] }),
   component: OptimizerPage,
 });
 
@@ -123,6 +124,7 @@ type VolatilityFilter = "all" | VolatilityBand;
 type Result = {
   sku_id: string;
   sku: string;
+  sku_name: string;
   annual_demand: number;
   monthly_demand: number;
   daily_demand: number;
@@ -145,6 +147,9 @@ type Result = {
   actionKey: ActionKey;
   order_qty: number;
   notes: string[];
+  stock: number;
+  on_order: number;
+  in_production: number;
 };
 
 type DemandTrendPoint = {
@@ -332,6 +337,7 @@ function analyse(sku: Sku, cfg: Cfg): Result {
   return {
     sku_id: sku.id,
     sku: sku.sku_code ?? sku.name ?? sku.id.slice(0, 8),
+    sku_name: sku.name ?? "",
     annual_demand,
     monthly_demand,
     daily_demand,
@@ -354,6 +360,9 @@ function analyse(sku: Sku, cfg: Cfg): Result {
     actionKey,
     order_qty,
     notes,
+    stock: safeNum(sku.stock),
+    on_order: safeNum(sku.on_order),
+    in_production: safeNum(sku.in_production),
   };
 }
 
@@ -363,6 +372,7 @@ function OptimizerPage() {
 
   const [skus, setSkus] = useState<Sku[]>([]);
   const [results, setResults] = useState<Result[]>([]);
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [search, setSearch] = useState("");
@@ -426,6 +436,37 @@ function OptimizerPage() {
     [cfg, skus],
   );
 
+  async function persistSkuField(
+    skuId: string,
+    field: "stock" | "on_order" | "in_production" | "lead_time_days",
+    value: number,
+  ) {
+    const updatePayload =
+      field === "stock"
+        ? { stock: value }
+        : field === "on_order"
+          ? { on_order: value }
+          : field === "in_production"
+            ? { in_production: value }
+            : { lead_time_days: value };
+
+    const { error } = await supabase.from("skus").update(updatePayload).eq("id", skuId);
+    if (error) toast.error("Mise à jour impossible pour ce SKU");
+  }
+
+  function updateSkuField(
+    skuId: string,
+    field: "stock" | "on_order" | "in_production" | "lead_time_days",
+    value: number,
+  ) {
+    const nextValue = Number.isFinite(value) ? value : 0;
+    setSkus((previous) => {
+      const next = previous.map((sku) => (sku.id === skuId ? { ...sku, [field]: nextValue } : sku));
+      setResults(next.map((sku) => analyse(sku, cfg)));
+      return next;
+    });
+  }
+
   const applyScenario = useCallback(
     (nextCfg: Cfg, name: string) => {
       setCfg(nextCfg);
@@ -450,6 +491,7 @@ function OptimizerPage() {
       if (options.immature) setImmatureFilter(options.immature);
       if (options.volatility) setVolatilityFilter(options.volatility);
       if (options.sku !== undefined) setHighlightedSku(options.sku);
+      setActiveTab("table");
 
       requestAnimationFrame(() => {
         tableSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -474,7 +516,10 @@ function OptimizerPage() {
     const q = search.trim().toLowerCase();
 
     return results.filter((r) => {
-      if (q && !r.sku.toLowerCase().includes(q)) return false;
+      if (q) {
+        const haystack = `${r.sku} ${r.sku_name} ${r.action} ${r.notes.join(" ")}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       if (actionFilter !== "all" && r.actionKey !== actionFilter) return false;
       if (volatilityFilter !== "all" && r.volatility_band !== volatilityFilter) return false;
 
@@ -676,7 +721,7 @@ function OptimizerPage() {
       <header className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Boxes className="h-6 w-6 text-primary" /> Analyse Hybride Cockpit
+            <Boxes className="h-6 w-6 text-primary" /> Inventory Optimizer Cockpit
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Vue interactive WCM pour piloter le stock, filtrer les risques et agir en un clic.
@@ -686,7 +731,7 @@ function OptimizerPage() {
           <div className="relative w-full sm:w-72">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Rechercher un SKU…"
+              placeholder="Rechercher (SKU, nom, action, note)…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -698,449 +743,517 @@ function OptimizerPage() {
         </div>
       </header>
 
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="text-sm font-bold">⚙️ Paramètres & scénarios</h3>
-          <div className="text-xs text-muted-foreground">
-            Ajustez la configuration puis relancez pour simuler vos décisions.
-          </div>
-        </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="table">Table éditable</TabsTrigger>
+        </TabsList>
 
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-          <div>
-            <Label className="text-xs">Coût de commande</Label>
-            <Input
-              type="number"
-              value={cfg.ordering_cost}
-              onChange={(e) => setCfg({ ...cfg, ordering_cost: parseFloat(e.target.value) || 0 })}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Taux possession (%)</Label>
-            <Input
-              type="number"
-              value={cfg.holding_rate * 100}
-              onChange={(e) =>
-                setCfg({ ...cfg, holding_rate: (parseFloat(e.target.value) || 0) / 100 })
-              }
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Délai global (jours ouvrables)</Label>
-            <Input
-              type="number"
-              value={cfg.lead_time_days}
-              onChange={(e) => {
-                const parsed = parseInt(e.target.value, 10);
-                setCfg({
-                  ...cfg,
-                  lead_time_days: !Number.isNaN(parsed) && parsed > 0 ? parsed : cfg.lead_time_days,
-                });
-              }}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Niveau service (%)</Label>
-            <Input
-              type="number"
-              value={cfg.service_level * 100}
-              onChange={(e) =>
-                setCfg({ ...cfg, service_level: (parseFloat(e.target.value) || 0) / 100 })
-              }
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Jours ouvrables/an</Label>
-            <Input
-              type="number"
-              value={cfg.business_days_per_year}
-              onChange={(e) => {
-                const parsed = parseInt(e.target.value, 10);
-                setCfg({
-                  ...cfg,
-                  business_days_per_year:
-                    !Number.isNaN(parsed) && parsed > 0 ? parsed : cfg.business_days_per_year,
-                });
-              }}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Demande simulée (%)</Label>
-            <Input
-              type="number"
-              value={Math.round(cfg.demand_multiplier * 100)}
-              onChange={(e) => {
-                const parsed = parseFloat(e.target.value);
-                const multiplier = !Number.isNaN(parsed) ? Math.max(parsed / 100, 0) : 0;
-                setCfg({ ...cfg, demand_multiplier: multiplier });
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 mt-2 flex-wrap">
-          <Button
-            variant="outline"
-            onClick={() =>
-              applyScenario(
-                { ...cfg, service_level: 0.95, holding_rate: 0.25, demand_multiplier: 1 },
-                "Balanced",
-              )
-            }
-          >
-            Balanced
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() =>
-              applyScenario(
-                { ...cfg, service_level: 0.98, holding_rate: 0.3, demand_multiplier: 1.05 },
-                "Service élevé",
-              )
-            }
-          >
-            Service élevé
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() =>
-              applyScenario(
-                { ...cfg, service_level: 0.9, holding_rate: 0.2, demand_multiplier: 0.9 },
-                "Cash prudent",
-              )
-            }
-          >
-            Cash prudent
-          </Button>
-        </div>
-
-        <div className="flex gap-2 mt-1 flex-wrap">
-          <Button onClick={() => runAnalysis()} disabled={running}>
-            {running ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4 mr-2" />
-            )}
-            Relancer l'analyse
-          </Button>
-          {results.length > 0 && (
-            <>
-              <Button variant="outline" onClick={() => runAnalysis()}>
-                <RefreshCw className="h-4 w-4 mr-2" /> Recalculer
-              </Button>
-              <Button variant="outline" onClick={exportCsv}>
-                <Download className="h-4 w-4 mr-2" /> Exporter CSV filtré
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {results.length > 0 && (
-        <>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            <KpiCard
-              label="Commander maintenant"
-              value={kpis.urgent}
-              active={actionFilter === "urgent"}
-              onClick={() => drillTo({ action: "urgent", risk: "stockout", sku: null })}
-            />
-            <KpiCard
-              label="Réapprovisionner"
-              value={kpis.reorder}
-              active={actionFilter === "reorder"}
-              onClick={() => drillTo({ action: "reorder", sku: null })}
-            />
-            <KpiCard
-              label="Surstock"
-              value={kpis.overstock}
-              active={actionFilter === "overstock"}
-              onClick={() => drillTo({ action: "overstock", risk: "overstock", sku: null })}
-            />
-            <KpiCard
-              label="Volatilité élevée"
-              value={kpis.highVolatility}
-              active={riskFilter === "volatile"}
-              onClick={() => drillTo({ risk: "volatile", volatility: "high", sku: null })}
-            />
-          </div>
-
-          <div className="grid xl:grid-cols-[1.2fr_1fr] gap-4">
-            <div className="rounded-2xl border border-border bg-card p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-primary" /> Courbe de demande (historique &
-                  prévision)
-                </h3>
-                <Badge variant="secondary" className="text-[10px]">
-                  Global SKU
-                </Badge>
-              </div>
-              <div className="h-72 mt-3">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={demandTrend}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="period" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="historical"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Historique"
-                      connectNulls
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="forecast"
-                      stroke="#f59e0b"
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      dot={false}
-                      name="Prévision"
-                      connectNulls
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+        <TabsContent value="dashboard" className="space-y-6">
+          <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h3 className="text-sm font-bold">⚙️ Paramètres & scénarios</h3>
+              <div className="text-xs text-muted-foreground">
+                Ajustez la configuration puis relancez pour simuler vos décisions.
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" /> Conseils actionnables
-              </h3>
-              {advisoryNotes.length > 0 ? (
-                advisoryNotes.map((note) => (
-                  <div
-                    key={note.id}
-                    className={cn(
-                      "rounded-xl border p-3",
-                      note.tone === "danger" && "border-red-500/30 bg-red-500/5",
-                      note.tone === "warning" && "border-amber-500/30 bg-amber-500/5",
-                      note.tone === "info" && "border-primary/30 bg-primary/5",
-                    )}
-                  >
-                    <div className="text-xs font-bold flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5" /> {note.title}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">{note.body}</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2 h-7 text-xs"
-                      onClick={note.onClick}
-                    >
-                      {note.actionLabel}
-                    </Button>
-                  </div>
-                ))
-              ) : (
-                <div className="text-xs text-muted-foreground border border-dashed rounded-xl p-4">
-                  Aucun signal critique détecté.
-                </div>
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+              <div>
+                <Label className="text-xs">Coût de commande</Label>
+                <Input
+                  type="number"
+                  value={cfg.ordering_cost}
+                  onChange={(e) =>
+                    setCfg({ ...cfg, ordering_cost: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Taux possession (%)</Label>
+                <Input
+                  type="number"
+                  value={cfg.holding_rate * 100}
+                  onChange={(e) =>
+                    setCfg({ ...cfg, holding_rate: (parseFloat(e.target.value) || 0) / 100 })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Délai global (jours ouvrables)</Label>
+                <Input
+                  type="number"
+                  value={cfg.lead_time_days}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    setCfg({
+                      ...cfg,
+                      lead_time_days:
+                        !Number.isNaN(parsed) && parsed > 0 ? parsed : cfg.lead_time_days,
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Niveau service (%)</Label>
+                <Input
+                  type="number"
+                  value={cfg.service_level * 100}
+                  onChange={(e) =>
+                    setCfg({ ...cfg, service_level: (parseFloat(e.target.value) || 0) / 100 })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Jours ouvrables/an</Label>
+                <Input
+                  type="number"
+                  value={cfg.business_days_per_year}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    setCfg({
+                      ...cfg,
+                      business_days_per_year:
+                        !Number.isNaN(parsed) && parsed > 0 ? parsed : cfg.business_days_per_year,
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Demande simulée (%)</Label>
+                <Input
+                  type="number"
+                  value={Math.round(cfg.demand_multiplier * 100)}
+                  onChange={(e) => {
+                    const parsed = parseFloat(e.target.value);
+                    const multiplier = !Number.isNaN(parsed) ? Math.max(parsed / 100, 0) : 0;
+                    setCfg({ ...cfg, demand_multiplier: multiplier });
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  applyScenario(
+                    { ...cfg, service_level: 0.95, holding_rate: 0.25, demand_multiplier: 1 },
+                    "Balanced",
+                  )
+                }
+              >
+                Balanced
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  applyScenario(
+                    { ...cfg, service_level: 0.98, holding_rate: 0.3, demand_multiplier: 1.05 },
+                    "Service élevé",
+                  )
+                }
+              >
+                Service élevé
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  applyScenario(
+                    { ...cfg, service_level: 0.9, holding_rate: 0.2, demand_multiplier: 0.9 },
+                    "Cash prudent",
+                  )
+                }
+              >
+                Cash prudent
+              </Button>
+            </div>
+
+            <div className="flex gap-2 mt-1 flex-wrap">
+              <Button onClick={() => runAnalysis()} disabled={running}>
+                {running ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                Relancer l'analyse
+              </Button>
+              {results.length > 0 && (
+                <>
+                  <Button variant="outline" onClick={() => runAnalysis()}>
+                    <RefreshCw className="h-4 w-4 mr-2" /> Recalculer
+                  </Button>
+                  <Button variant="outline" onClick={exportCsv}>
+                    <Download className="h-4 w-4 mr-2" /> Exporter CSV filtré
+                  </Button>
+                </>
               )}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h3 className="text-sm font-bold">Stock vs seuils (clic barre = drill-down SKU)</h3>
-              <Badge variant="outline" className="text-[10px]">
-                Top 12 priorités de la vue filtrée
-              </Badge>
-            </div>
-            <div className="h-72 mt-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={stockSignals}
-                  onClick={(chartState) => {
-                    const sku = extractChartSku(chartState);
-                    if (sku) drillTo({ sku });
-                  }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="sku" interval={0} angle={-30} textAnchor="end" height={64} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
-                  <Bar dataKey="effective_stock" name="Stock effectif" fill="hsl(var(--primary))" />
-                  <Bar dataKey="reorder_point" name="ROP" fill="#f59e0b" />
-                  <Bar dataKey="max_qty" name="Max" fill="#22c55e" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </>
-      )}
+          {results.length > 0 && (
+            <>
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                <KpiCard
+                  label="Commander maintenant"
+                  value={kpis.urgent}
+                  active={actionFilter === "urgent"}
+                  onClick={() => drillTo({ action: "urgent", risk: "stockout", sku: null })}
+                />
+                <KpiCard
+                  label="Réapprovisionner"
+                  value={kpis.reorder}
+                  active={actionFilter === "reorder"}
+                  onClick={() => drillTo({ action: "reorder", sku: null })}
+                />
+                <KpiCard
+                  label="Surstock"
+                  value={kpis.overstock}
+                  active={actionFilter === "overstock"}
+                  onClick={() => drillTo({ action: "overstock", risk: "overstock", sku: null })}
+                />
+                <KpiCard
+                  label="Volatilité élevée"
+                  value={kpis.highVolatility}
+                  active={riskFilter === "volatile"}
+                  onClick={() => drillTo({ risk: "volatile", volatility: "high", sku: null })}
+                />
+              </div>
 
-      {results.length > 0 ? (
-        <div ref={tableSectionRef} className="space-y-4">
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <h3 className="text-sm font-bold mb-3">Filtres avancés</h3>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <FilterSelect
-                label="Action"
-                value={actionFilter}
-                onValueChange={(v) => setActionFilter(v as ActionFilter)}
-                items={[
-                  { value: "all", label: "Toutes" },
-                  { value: "urgent", label: "ORDER NOW" },
-                  { value: "reorder", label: "REORDER" },
-                  { value: "overstock", label: "OVERSTOCK" },
-                  { value: "ok", label: "OK" },
-                  { value: "none", label: "NO ACTION" },
-                ]}
-              />
-              <FilterSelect
-                label="Risque"
-                value={riskFilter}
-                onValueChange={(v) => setRiskFilter(v as RiskFilter)}
-                items={[
-                  { value: "all", label: "Tous" },
-                  { value: "stockout", label: "Rupture" },
-                  { value: "overstock", label: "Surstock" },
-                  { value: "volatile", label: "Volatilité haute" },
-                  { value: "seasonal", label: "Saisonnier" },
-                  { value: "immature", label: "Immature" },
-                ]}
-              />
-              <FilterSelect
-                label="Saisonnier"
-                value={seasonalFilter}
-                onValueChange={(v) => setSeasonalFilter(v as BinaryFilter)}
-                items={[
-                  { value: "all", label: "Tous" },
-                  { value: "yes", label: "Oui" },
-                  { value: "no", label: "Non" },
-                ]}
-              />
-              <FilterSelect
-                label="Immature"
-                value={immatureFilter}
-                onValueChange={(v) => setImmatureFilter(v as BinaryFilter)}
-                items={[
-                  { value: "all", label: "Tous" },
-                  { value: "yes", label: "Oui" },
-                  { value: "no", label: "Non" },
-                ]}
-              />
-              <FilterSelect
-                label="Volatilité"
-                value={volatilityFilter}
-                onValueChange={(v) => setVolatilityFilter(v as VolatilityFilter)}
-                items={[
-                  { value: "all", label: "Toutes" },
-                  { value: "low", label: "Faible" },
-                  { value: "medium", label: "Moyenne" },
-                  { value: "high", label: "Forte" },
-                ]}
-              />
-            </div>
-          </div>
+              <div className="grid xl:grid-cols-[1.2fr_1fr] gap-4">
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-primary" /> Courbe de demande (historique
+                      & prévision)
+                    </h3>
+                    <Badge variant="secondary" className="text-[10px]">
+                      Global SKU
+                    </Badge>
+                  </div>
+                  <div className="h-72 mt-3">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={demandTrend}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis dataKey="period" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="historical"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={false}
+                          name="Historique"
+                          connectNulls
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="forecast"
+                          stroke="#f59e0b"
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          dot={false}
+                          name="Prévision"
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
 
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold">
-                📋 Données analysées ({filtered.length}/{results.length})
-              </h3>
-              {highlightedSku && <Badge variant="secondary">SKU ciblé: {highlightedSku}</Badge>}
-            </div>
-            <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/40 sticky top-0">
-                  <tr>
-                    <th className="text-left p-2">SKU</th>
-                    <th className="text-left p-2">Action</th>
-                    <th className="text-left p-2">Risque</th>
-                    <th className="text-left p-2">Vol.</th>
-                    <th className="text-right p-2">Qté</th>
-                    <th className="text-right p-2">EOQ</th>
-                    <th className="text-right p-2">Min</th>
-                    <th className="text-right p-2">Max</th>
-                    <th className="text-right p-2">SS</th>
-                    <th className="text-right p-2">Stock Eff.</th>
-                    <th className="text-right p-2">Couv. ouvrable</th>
-                    <th className="text-right p-2">LT ouvrable</th>
-                    <th className="text-right p-2">Dem./an</th>
-                    <th className="text-left p-2">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r) => {
-                    const rowActive = highlightedSku === r.sku;
-                    return (
-                      <tr
-                        key={r.sku_id}
-                        onClick={() => setHighlightedSku(r.sku)}
+                <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                  <h3 className="text-sm font-bold flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> Conseils actionnables
+                  </h3>
+                  {advisoryNotes.length > 0 ? (
+                    advisoryNotes.map((note) => (
+                      <div
+                        key={note.id}
                         className={cn(
-                          "border-t border-border hover:bg-muted/20 cursor-pointer",
-                          rowActive && "bg-primary/10",
+                          "rounded-xl border p-3",
+                          note.tone === "danger" && "border-red-500/30 bg-red-500/5",
+                          note.tone === "warning" && "border-amber-500/30 bg-amber-500/5",
+                          note.tone === "info" && "border-primary/30 bg-primary/5",
                         )}
                       >
-                        <td className="p-2 font-mono">{r.sku}</td>
-                        <td className="p-2 font-bold">{r.action}</td>
-                        <td className="p-2">
-                          <div className="flex gap-1 flex-wrap">
-                            {r.stockout_risk && <Badge className="text-[10px]">Rupture</Badge>}
-                            {r.overstock_risk && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                Surstock
-                              </Badge>
-                            )}
-                            {!r.stockout_risk && !r.overstock_risk && (
-                              <Badge variant="outline" className="text-[10px]">
-                                Stable
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <Badge
-                            variant={
-                              r.volatility_band === "high"
-                                ? "destructive"
-                                : r.volatility_band === "medium"
-                                  ? "secondary"
-                                  : "outline"
-                            }
-                            className="text-[10px]"
-                          >
-                            {r.volatility_band}
-                          </Badge>
-                        </td>
-                        <td className="p-2 text-right font-mono">{r.order_qty.toLocaleString()}</td>
-                        <td className="p-2 text-right font-mono">{r.eoq.toLocaleString()}</td>
-                        <td className="p-2 text-right font-mono">{r.reorder_point}</td>
-                        <td className="p-2 text-right font-mono">{r.max_qty}</td>
-                        <td className="p-2 text-right font-mono">{r.safety_stock}</td>
-                        <td className="p-2 text-right font-mono">{r.effective_stock.toFixed(0)}</td>
-                        <td className="p-2 text-right font-mono">
-                          {r.coverage_days >= 999 ? "∞" : r.coverage_days.toFixed(0)}
-                        </td>
-                        <td className="p-2 text-right font-mono">{r.lead_time_days}</td>
-                        <td className="p-2 text-right font-mono">
-                          {r.annual_demand.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        </td>
-                        <td className="p-2 text-muted-foreground max-w-[280px]">
-                          {r.notes.join(" | ")}
-                        </td>
+                        <div className="text-xs font-bold flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5" /> {note.title}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{note.body}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 h-7 text-xs"
+                          onClick={note.onClick}
+                        >
+                          {note.actionLabel}
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-xs text-muted-foreground border border-dashed rounded-xl p-4">
+                      Aucun signal critique détecté.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-sm font-bold">
+                    Stock vs seuils (clic barre = drill-down SKU)
+                  </h3>
+                  <Badge variant="outline" className="text-[10px]">
+                    Top 12 priorités de la vue filtrée
+                  </Badge>
+                </div>
+                <div className="h-72 mt-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={stockSignals}
+                      onClick={(chartState) => {
+                        const sku = extractChartSku(chartState);
+                        if (sku) drillTo({ sku });
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="sku" interval={0} angle={-30} textAnchor="end" height={64} />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
+                      <Bar
+                        dataKey="effective_stock"
+                        name="Stock effectif"
+                        fill="hsl(var(--primary))"
+                      />
+                      <Bar dataKey="reorder_point" name="ROP" fill="#f59e0b" />
+                      <Bar dataKey="max_qty" name="Max" fill="#22c55e" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="table" className="space-y-4">
+          {results.length > 0 ? (
+            <div ref={tableSectionRef} className="space-y-4">
+              <div className="rounded-2xl border border-border bg-card p-4">
+                <h3 className="text-sm font-bold mb-3">Filtres avancés</h3>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <FilterSelect
+                    label="Action"
+                    value={actionFilter}
+                    onValueChange={(v) => setActionFilter(v as ActionFilter)}
+                    items={[
+                      { value: "all", label: "Toutes" },
+                      { value: "urgent", label: "ORDER NOW" },
+                      { value: "reorder", label: "REORDER" },
+                      { value: "overstock", label: "OVERSTOCK" },
+                      { value: "ok", label: "OK" },
+                      { value: "none", label: "NO ACTION" },
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Risque"
+                    value={riskFilter}
+                    onValueChange={(v) => setRiskFilter(v as RiskFilter)}
+                    items={[
+                      { value: "all", label: "Tous" },
+                      { value: "stockout", label: "Rupture" },
+                      { value: "overstock", label: "Surstock" },
+                      { value: "volatile", label: "Volatilité haute" },
+                      { value: "seasonal", label: "Saisonnier" },
+                      { value: "immature", label: "Immature" },
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Saisonnier"
+                    value={seasonalFilter}
+                    onValueChange={(v) => setSeasonalFilter(v as BinaryFilter)}
+                    items={[
+                      { value: "all", label: "Tous" },
+                      { value: "yes", label: "Oui" },
+                      { value: "no", label: "Non" },
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Immature"
+                    value={immatureFilter}
+                    onValueChange={(v) => setImmatureFilter(v as BinaryFilter)}
+                    items={[
+                      { value: "all", label: "Tous" },
+                      { value: "yes", label: "Oui" },
+                      { value: "no", label: "Non" },
+                    ]}
+                  />
+                  <FilterSelect
+                    label="Volatilité"
+                    value={volatilityFilter}
+                    onValueChange={(v) => setVolatilityFilter(v as VolatilityFilter)}
+                    items={[
+                      { value: "all", label: "Toutes" },
+                      { value: "low", label: "Faible" },
+                      { value: "medium", label: "Moyenne" },
+                      { value: "high", label: "Forte" },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                <div className="p-4 border-b border-border flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold">
+                    📋 Données analysées ({filtered.length}/{results.length})
+                  </h3>
+                  {highlightedSku && <Badge variant="secondary">SKU ciblé: {highlightedSku}</Badge>}
+                </div>
+                <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40 sticky top-0">
+                      <tr>
+                        <th className="text-left p-2">SKU</th>
+                        <th className="text-left p-2">Nom</th>
+                        <th className="text-left p-2">Action</th>
+                        <th className="text-left p-2">Risque</th>
+                        <th className="text-left p-2">Vol.</th>
+                        <th className="text-right p-2">Stock (éditable)</th>
+                        <th className="text-right p-2">En commande</th>
+                        <th className="text-right p-2">En production</th>
+                        <th className="text-right p-2">LT</th>
+                        <th className="text-right p-2">Qté</th>
+                        <th className="text-right p-2">EOQ</th>
+                        <th className="text-right p-2">Min</th>
+                        <th className="text-right p-2">Max</th>
+                        <th className="text-right p-2">SS</th>
+                        <th className="text-right p-2">Stock Eff.</th>
+                        <th className="text-right p-2">Couv. ouvrable</th>
+                        <th className="text-right p-2">Dem./an</th>
+                        <th className="text-left p-2">Notes</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {filtered.map((r) => {
+                        const rowActive = highlightedSku === r.sku;
+                        return (
+                          <tr
+                            key={r.sku_id}
+                            onClick={() => setHighlightedSku(r.sku)}
+                            className={cn(
+                              "border-t border-border hover:bg-muted/20 cursor-pointer",
+                              rowActive && "bg-primary/10",
+                            )}
+                          >
+                            <td className="p-2 font-mono">{r.sku}</td>
+                            <td className="p-2 max-w-[180px] truncate">{r.sku_name || "—"}</td>
+                            <td className="p-2 font-bold">{r.action}</td>
+                            <td className="p-2">
+                              <div className="flex gap-1 flex-wrap">
+                                {r.stockout_risk && <Badge className="text-[10px]">Rupture</Badge>}
+                                {r.overstock_risk && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    Surstock
+                                  </Badge>
+                                )}
+                                {!r.stockout_risk && !r.overstock_risk && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Stable
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-2">
+                              <Badge
+                                variant={
+                                  r.volatility_band === "high"
+                                    ? "destructive"
+                                    : r.volatility_band === "medium"
+                                      ? "secondary"
+                                      : "outline"
+                                }
+                                className="text-[10px]"
+                              >
+                                {r.volatility_band}
+                              </Badge>
+                            </td>
+                            <td className="p-2">
+                              <InlineEditNumber
+                                value={r.stock}
+                                onChange={(value) => updateSkuField(r.sku_id, "stock", value)}
+                                onBlur={(value) => void persistSkuField(r.sku_id, "stock", value)}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <InlineEditNumber
+                                value={r.on_order}
+                                onChange={(value) => updateSkuField(r.sku_id, "on_order", value)}
+                                onBlur={(value) =>
+                                  void persistSkuField(r.sku_id, "on_order", value)
+                                }
+                              />
+                            </td>
+                            <td className="p-2">
+                              <InlineEditNumber
+                                value={r.in_production}
+                                onChange={(value) =>
+                                  updateSkuField(r.sku_id, "in_production", value)
+                                }
+                                onBlur={(value) =>
+                                  void persistSkuField(r.sku_id, "in_production", value)
+                                }
+                              />
+                            </td>
+                            <td className="p-2">
+                              <InlineEditNumber
+                                value={r.lead_time_days}
+                                onChange={(value) =>
+                                  updateSkuField(r.sku_id, "lead_time_days", value)
+                                }
+                                onBlur={(value) =>
+                                  void persistSkuField(r.sku_id, "lead_time_days", value)
+                                }
+                              />
+                            </td>
+                            <td className="p-2 text-right font-mono">
+                              {r.order_qty.toLocaleString()}
+                            </td>
+                            <td className="p-2 text-right font-mono">{r.eoq.toLocaleString()}</td>
+                            <td className="p-2 text-right font-mono">{r.reorder_point}</td>
+                            <td className="p-2 text-right font-mono">{r.max_qty}</td>
+                            <td className="p-2 text-right font-mono">{r.safety_stock}</td>
+                            <td className="p-2 text-right font-mono">
+                              {r.effective_stock.toFixed(0)}
+                            </td>
+                            <td className="p-2 text-right font-mono">
+                              {r.coverage_days >= 999 ? "∞" : r.coverage_days.toFixed(0)}
+                            </td>
+                            <td className="p-2 text-right font-mono">
+                              {r.annual_demand.toLocaleString(undefined, {
+                                maximumFractionDigits: 0,
+                              })}
+                            </td>
+                            <td className="p-2 text-muted-foreground max-w-[280px]">
+                              {r.notes.join(" | ")}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
-          Aucun SKU dans la base. Importez vos données depuis l'onglet Gestion SKUs.
-        </div>
-      )}
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
+              Aucun SKU dans la base. Importez vos données depuis l'onglet Gestion SKUs.
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -1172,6 +1285,36 @@ function FilterSelect({
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+function InlineEditNumber({
+  value,
+  onChange,
+  onBlur,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  onBlur?: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(Math.round(value)));
+
+  useEffect(() => {
+    setDraft(String(Math.round(value)));
+  }, [value]);
+
+  return (
+    <Input
+      type="number"
+      className="h-8 min-w-20 text-right font-mono"
+      value={draft}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        onChange(Number.parseFloat(event.target.value) || 0);
+      }}
+      onBlur={() => onBlur?.(Number.parseFloat(draft) || 0)}
+    />
   );
 }
 
