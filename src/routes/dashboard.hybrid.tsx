@@ -578,10 +578,10 @@ function InlineNumberInput({
   onChange: (value: number) => void;
   onBlur?: (value: number) => void;
 }) {
-  const [draft, setDraft] = useState(String(Math.round(value)));
+  const [draft, setDraft] = useState(String(value));
 
   useEffect(() => {
-    setDraft(String(Math.round(value)));
+    setDraft(String(value));
   }, [value]);
 
   return (
