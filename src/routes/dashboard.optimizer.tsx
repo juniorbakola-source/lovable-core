@@ -373,7 +373,13 @@ function OptimizerPage() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase.from("skus").select("*").eq("user_id", user.id);
+      const { data, error } = await supabase
+        .from("skus")
+        .select(
+          "id,sku_code,name,stock,on_order,in_production,lead_time_days,unit_cost,demand_history,demand_history_yearly,forecast_3m,created_at",
+        )
+        .eq("user_id", user.id)
+        .limit(5000);
 
       if (error) {
         toast.error("Erreur de chargement des SKUs");
