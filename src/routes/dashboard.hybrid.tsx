@@ -107,13 +107,33 @@ function HybridInventoryPage() {
 
   async function persistSkuField(
     skuId: string,
-    field: "stock" | "onOrder" | "inProduction",
+    field: "stock" | "on_order" | "in_production" | "reserved",
     value: number,
   ) {
+    if (field === "reserved") {
+      const { data: existing, error: selectError } = await supabase
+        .from("inventory")
+        .select("id")
+        .eq("sku_id", skuId)
+        .limit(1)
+        .maybeSingle();
+      if (selectError) {
+        toast.error("Mise à jour impossible pour le stock réservé");
+        return;
+      }
+
+      const operation = existing
+        ? supabase.from("inventory").update({ reserved: value }).eq("id", existing.id)
+        : supabase.from("inventory").insert({ sku_id: skuId, reserved: value });
+      const { error } = await operation;
+      if (error) toast.error("Mise à jour impossible pour le stock réservé");
+      return;
+    }
+
     const updatePayload =
       field === "stock"
         ? { stock: value }
-        : field === "onOrder"
+        : field === "on_order"
           ? { on_order: value }
           : { in_production: value };
 
@@ -484,20 +504,23 @@ function HybridInventoryPage() {
                           <InlineNumberInput
                             value={r.reserved}
                             onChange={(value) => updateSkuField(r.skuId, "reserved", value)}
+                            onBlur={(value) => void persistSkuField(r.skuId, "reserved", value)}
                           />
                         </td>
                         <td className="p-2">
                           <InlineNumberInput
                             value={r.onOrder}
                             onChange={(value) => updateSkuField(r.skuId, "onOrder", value)}
-                            onBlur={(value) => void persistSkuField(r.skuId, "onOrder", value)}
+                            onBlur={(value) => void persistSkuField(r.skuId, "on_order", value)}
                           />
                         </td>
                         <td className="p-2">
                           <InlineNumberInput
                             value={r.inProduction}
                             onChange={(value) => updateSkuField(r.skuId, "inProduction", value)}
-                            onBlur={(value) => void persistSkuField(r.skuId, "inProduction", value)}
+                            onBlur={(value) =>
+                              void persistSkuField(r.skuId, "in_production", value)
+                            }
                           />
                         </td>
                         <td className="p-2 text-right font-mono">{r.annualDemand.toFixed(0)}</td>

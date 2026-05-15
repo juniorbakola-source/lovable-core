@@ -63,12 +63,12 @@ type SkuRow = Database["public"]["Tables"]["skus"]["Row"];
 
 export const INFINITE_COVERAGE_DAYS = 9999;
 
-const Z_TABLE: Record<string, number> = {
-  "0.90": 1.282,
-  "0.95": 1.645,
-  "0.97": 1.881,
-  "0.99": 2.326,
-};
+const Z_TABLE: Array<{ serviceLevel: number; z: number }> = [
+  { serviceLevel: 0.9, z: 1.282 },
+  { serviceLevel: 0.95, z: 1.645 },
+  { serviceLevel: 0.97, z: 1.881 },
+  { serviceLevel: 0.99, z: 2.326 },
+];
 
 export const DEFAULT_CONFIG: InventoryConfig = {
   orderingCost: 50,
@@ -103,10 +103,11 @@ const stddev = (values?: number[]) => {
 };
 
 function zScore(serviceLevel: number) {
-  const nearest = Object.keys(Z_TABLE).reduce((a, b) =>
-    Math.abs(Number(b) - serviceLevel) < Math.abs(Number(a) - serviceLevel) ? b : a,
-  );
-  return Z_TABLE[nearest];
+  return Z_TABLE.reduce((best, candidate) =>
+    Math.abs(candidate.serviceLevel - serviceLevel) < Math.abs(best.serviceLevel - serviceLevel)
+      ? candidate
+      : best,
+  ).z;
 }
 
 function summarizeActionAndRecommendations(
