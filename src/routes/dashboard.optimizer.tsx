@@ -418,12 +418,10 @@ function OptimizerPage() {
 
       const activeCfg = nextCfg ?? cfg;
       setRunning(true);
-      setTimeout(() => {
-        const out = skus.map((sku) => analyse(sku, activeCfg));
-        setResults(out);
-        setRunning(false);
-        toast.success(`${out.length} SKUs analysés`);
-      }, 50);
+      const out = skus.map((sku) => analyse(sku, activeCfg));
+      setResults(out);
+      setRunning(false);
+      toast.success(`${out.length} SKUs analysés`);
     },
     [cfg, skus],
   );
